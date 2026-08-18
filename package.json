@@ -1,0 +1,53 @@
+{
+  "name": "@danvic/backend",
+  "version": "0.0.1",
+  "description": "Backend API for the DANVIC Project",
+  "main": "dist/init.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "start": "node dist/init.js",
+    "typecheck": "tsc --noEmit",
+    "validate": "yarn format:check && yarn typecheck"
+  },
+  "author": "Chiemekam Anyanwu-Ebere",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1110.0",
+    "@aws-sdk/s3-request-presigner": "^3.1110.0",
+    "agora-token": "^2.0.5",
+    "bullmq": "^6.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ioredis": "^6.0.0",
+    "joi": "^18.2.3",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.9.2",
+    "otplib": "^13.4.1",
+    "pdf-lib": "1.17.1",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4",
+    "redis": "^6.2.1",
+    "reflect-metadata": "^0.2.2",
+    "resend": "^6.20.0",
+    "typedi": "^0.10.0",
+    "ulid": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.3.0",
+    "@types/qrcode": "^1.5.6",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3"
+  }
+}
