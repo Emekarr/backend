@@ -38,7 +38,13 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
       else if (result.status === 'two-factor-required')
         setChallenge(response, 'admin', result.challengeToken)
       else setSetup(response, 'admin', result.setupToken)
-      response.status(result.status === 'authenticated' ? 200 : 202).json(result)
+      const next =
+        result.status === 'authenticated'
+          ? '/dashboard'
+          : result.status === 'two-factor-required'
+            ? '/two-factor'
+            : '/two-factor/setup'
+      response.status(result.status === 'authenticated' ? 200 : 202).json({ ...result, next })
     }),
   )
 
@@ -114,7 +120,7 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
         (request.body as { code: string }).code,
       )
       setSession(response, 'admin', tokens)
-      response.status(200).json(tokens)
+      response.status(200).json({ ...tokens, next: '/dashboard' })
     }),
   )
 
@@ -129,7 +135,7 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
         (request.body as { code: string }).code,
       )
       setSession(response, 'admin', tokens)
-      response.status(200).json(tokens)
+      response.status(200).json({ ...tokens, next: '/dashboard' })
     }),
   )
 

@@ -36,7 +36,8 @@ export const createAuthorRouter = (dependencies: {
       const result = await dependencies.authorAuth.login(body.email, body.password)
       if (result.status === 'authenticated') setSession(response, 'author', result)
       else setChallenge(response, 'author', result.challengeToken)
-      response.status(result.status === 'authenticated' ? 200 : 202).json(result)
+      const next = result.status === 'authenticated' ? '/dashboard' : '/two-factor'
+      response.status(result.status === 'authenticated' ? 200 : 202).json({ ...result, next })
     }),
   )
 
@@ -100,7 +101,7 @@ export const createAuthorRouter = (dependencies: {
         (request.body as { code: string }).code,
       )
       setSession(response, 'author', tokens)
-      response.json(tokens)
+      response.json({ ...tokens, next: '/dashboard' })
     }),
   )
 

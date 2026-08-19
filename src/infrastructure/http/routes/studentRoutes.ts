@@ -50,7 +50,8 @@ export const createStudentRouter = (dependencies: {
       const result = await dependencies.studentAuth.login(body.email, body.password)
       if (result.status === 'two-factor-required') setChallenge(response, 'student', result.challengeToken)
       else setSetup(response, 'student', result.setupToken)
-      response.status(202).json(result)
+      const next = result.status === 'two-factor-required' ? '/two-factor' : '/two-factor/setup'
+      response.status(202).json({ ...result, next })
     }),
   )
 
@@ -61,8 +62,8 @@ export const createStudentRouter = (dependencies: {
     limit(dependencies.rateLimiter, 'student-refresh', 30, 60),
     asyncRoute(async (request, response) => {
       const tokens = await dependencies.studentAuth.refresh(bearer(request, 'refresh'))
-      setSession(response, 'student', tokens)
-      response.status(200).json(tokens)
+setSession(response, 'student', tokens)
+      response.json({ ...tokens, next: '/dashboard' })
     }),
   )
 
@@ -124,7 +125,7 @@ export const createStudentRouter = (dependencies: {
         (request.body as { code: string }).code,
       )
       setSession(response, 'student', tokens)
-      response.json(tokens)
+      response.json({ ...tokens, next: '/dashboard' })
     }),
   )
 
@@ -139,7 +140,7 @@ export const createStudentRouter = (dependencies: {
         (request.body as { code: string }).code,
       )
       setSession(response, 'student', tokens)
-      response.json(tokens)
+      response.json({ ...tokens, next: '/dashboard' })
     }),
   )
 

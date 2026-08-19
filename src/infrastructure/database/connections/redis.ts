@@ -36,8 +36,8 @@ const buildRedisPool = (
 export type RedisPool = ReturnType<typeof buildRedisPool>
 
 export class RedisDBConnection implements LifecycleService {
-  private readonly minPoolSize = 3
-  private readonly maxPoolSize = 20
+  private readonly minPoolSize = 1
+  private readonly maxPoolSize = 1
   private readonly connectionTimeoutMs = 10_000
   private pool?: RedisPool
   private connectionPromise?: Promise<void>

@@ -48,5 +48,6 @@ const destination = (frontend: Frontend, url: string): string => {
     return `/admin${pathname}${suffix}`
   }
 
+  if (pathname.startsWith('/live/')) return `/author${pathname.slice('/live'.length)}${suffix}`
   return `/author${pathname}${suffix}`
 }

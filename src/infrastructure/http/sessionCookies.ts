@@ -5,12 +5,12 @@ export type FrontendSession = 'admin' | 'author' | 'student'
 type TokenKind = 'access' | 'refresh' | 'challenge' | 'setup'
 
 const cookieName = (frontend: FrontendSession, kind: TokenKind) => `danvic_${frontend}_${kind}`
-const cookieOptions = (maxAge: number, httpOnly = true) => ({
+const cookieOptions = (maxAgeSeconds: number, httpOnly = true) => ({
   httpOnly,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge,
+  maxAge: maxAgeSeconds * 1000,
 })
 
 const cookies = (request: Request): Record<string, string> =>
