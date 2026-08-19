@@ -8,7 +8,7 @@ const cookieName = (frontend: FrontendSession, kind: TokenKind) => `danvic_${fro
 const cookieOptions = (maxAgeSeconds: number, httpOnly = true) => ({
   httpOnly,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  sameSite: 'none' as const,
   path: '/',
   maxAge: maxAgeSeconds * 1000,
 })
@@ -42,23 +42,23 @@ export const setSession = (
 ): void => {
   response.cookie(cookieName(frontend, 'access'), tokens.accessToken, cookieOptions(2 * 60 * 60))
   response.cookie(cookieName(frontend, 'refresh'), tokens.refreshToken, cookieOptions(30 * 24 * 60 * 60))
-  response.clearCookie(cookieName(frontend, 'challenge'), { path: '/' })
-  response.clearCookie(cookieName(frontend, 'setup'), { path: '/' })
+  response.clearCookie(cookieName(frontend, 'challenge'), cookieOptions(0))
+  response.clearCookie(cookieName(frontend, 'setup'), cookieOptions(0))
 }
 
 export const setChallenge = (response: Response, frontend: FrontendSession, token: string): void => {
   response.cookie(cookieName(frontend, 'challenge'), token, cookieOptions(5 * 60))
-  response.clearCookie(cookieName(frontend, 'access'), { path: '/' })
-  response.clearCookie(cookieName(frontend, 'refresh'), { path: '/' })
+  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0))
+  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0))
 }
 
 export const setSetup = (response: Response, frontend: FrontendSession, token: string): void => {
   response.cookie(cookieName(frontend, 'setup'), token, cookieOptions(10 * 60))
-  response.clearCookie(cookieName(frontend, 'access'), { path: '/' })
-  response.clearCookie(cookieName(frontend, 'refresh'), { path: '/' })
+  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0))
+  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0))
 }
 
 export const clearSession = (response: Response, frontend: FrontendSession): void => {
   for (const kind of ['access', 'refresh', 'challenge', 'setup'] as const)
-    response.clearCookie(cookieName(frontend, kind), { path: '/' })
+    response.clearCookie(cookieName(frontend, kind), cookieOptions(0))
 }
