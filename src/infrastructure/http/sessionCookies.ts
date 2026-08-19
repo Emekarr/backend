@@ -9,6 +9,7 @@ const cookieOptions = (maxAgeSeconds: number, httpOnly = true) => ({
   httpOnly,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'none' as const,
+  partitioned: process.env.NODE_ENV === 'production',
   path: '/',
   maxAge: maxAgeSeconds * 1000,
 })
