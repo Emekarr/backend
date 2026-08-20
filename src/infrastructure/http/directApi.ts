@@ -39,6 +39,8 @@ const destination = (frontend: Frontend, url: string): string => {
       return `/live-recorder/${pathname.slice('/recorder/'.length)}/bootstrap${suffix}`
     if (pathname === '/auth/password') return `/student/auth/update-password${suffix}`
     if (pathname.startsWith('/certificates/')) return `/student${pathname}${suffix}`
+    if (pathname.endsWith('/download') && pathname.includes('/attachments/'))
+      return `/student${pathname}${suffix}`
     if (pathname.includes('/attachments/')) return `/student${pathname}/view${suffix}`
     if (pathname.startsWith('/live/')) return `/student${pathname.slice('/live'.length)}${suffix}`
     return `/student${pathname}${suffix}`

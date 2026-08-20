@@ -104,7 +104,11 @@ export class R2ObjectStorage implements ObjectStorage {
     return {
       downloadUrl: await getSignedUrl(
         this.client,
-        new GetObjectCommand({ Bucket: this.bucket, Key: attachmentPath }),
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: attachmentPath,
+          ResponseContentDisposition: 'attachment',
+        }),
         { expiresIn: expiresInSeconds },
       ),
       expiresInSeconds,
