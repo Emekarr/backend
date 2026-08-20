@@ -312,14 +312,12 @@ export class CourseService {
   private async assertAttachments(authorId: string, paths: string[]): Promise<void> {
     for (const path of paths) {
       if (
-        !path.startsWith(`courses/${authorId}/`) ||
-        !(await this.dependencies.storage.exists(path))
+        !path.startsWith(`courses/${authorId}/`)
+        // Do not confirm the upload with R2 here. Course creation accepts the signed
+        // attachment path once it has been scoped to the authenticated author.
+        // || !(await this.dependencies.storage.exists(path))
       ) {
-        throw new ApplicationError(
-          'Attachment path is invalid or the upload is incomplete',
-          'INVALID_ATTACHMENT',
-          400,
-        )
+        throw new ApplicationError('Attachment path is invalid', 'INVALID_ATTACHMENT', 400)
       }
     }
   }
