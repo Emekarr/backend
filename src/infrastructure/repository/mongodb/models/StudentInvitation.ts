@@ -14,6 +14,8 @@ export const StudentInvitationSchema = new Schema<StudentInvitation>(
     sentAt: { type: Date, default: null },
     acceptedAt: { type: Date, default: null },
     deliveryError: { type: String, default: null, maxlength: 500 },
+    resendCount: { type: Number, default: 0, min: 0 },
+    lastResentAt: { type: Date, default: null },
   },
   baseSchemaOptions,
 )

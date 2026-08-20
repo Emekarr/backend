@@ -10,6 +10,8 @@ export interface AdminInvitation extends BaseEntity {
   sentAt: Date | null
   acceptedAt: Date | null
   deliveryError: string | null
+  resendCount: number
+  lastResentAt: Date | null
 }
 
 export type CreateAdminInvitation = Omit<AdminInvitation, keyof BaseEntity>

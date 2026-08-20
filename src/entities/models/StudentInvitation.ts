@@ -12,6 +12,8 @@ export interface StudentInvitation extends BaseEntity {
   sentAt: Date | null
   acceptedAt: Date | null
   deliveryError: string | null
+  resendCount: number
+  lastResentAt: Date | null
 }
 
 export type CreateStudentInvitation = Omit<StudentInvitation, keyof BaseEntity>

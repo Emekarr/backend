@@ -9,6 +9,8 @@ import type { Permission } from '../../entities/models/Permissions'
 import type { AdminNotificationService } from './AdminNotificationService'
 
 const INVITATION_LIFETIME_MS = 72 * 60 * 60 * 1_000
+const INVITATION_RESEND_MAX = 3
+const INVITATION_RESEND_WINDOW_MS = 24 * 60 * 60 * 1_000
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export interface AdminInvitationDependencies {
@@ -22,7 +24,7 @@ export interface AdminInvitationDependencies {
 
 export interface InvitationResult {
   email: string
-  status: 'queued' | 'already-admin' | 'already-invited'
+  status: 'queued' | 'already-admin' | 'already-invited' | 'resend-limit-reached'
 }
 
 export class AdminInvitationService {
@@ -52,8 +54,29 @@ export class AdminInvitationService {
         continue
       }
 
-      if (await this.dependencies.invitations.findActiveByEmail(email, new Date())) {
-        results.push({ email, status: 'already-invited' })
+      const existing = await this.dependencies.invitations.findActiveByEmail(email, new Date())
+      if (existing) {
+        const now = new Date()
+        const resendCount = existing.resendCount ?? 0
+        const withinWindow =
+          existing.lastResentAt &&
+          now.getTime() - existing.lastResentAt.getTime() < INVITATION_RESEND_WINDOW_MS
+        if (resendCount >= INVITATION_RESEND_MAX && withinWindow) {
+          results.push({ email, status: 'resend-limit-reached' })
+          continue
+        }
+        const invitationToken = this.dependencies.secureTokens.token(32)
+        await this.dependencies.invitations.updateById(existing.id, {
+          tokenHash: this.dependencies.secureTokens.hash(invitationToken),
+          expiresAt: new Date(now.getTime() + INVITATION_LIFETIME_MS),
+          sentAt: null,
+          deliveryError: null,
+          resendCount: withinWindow ? resendCount + 1 : 1,
+          lastResentAt: now,
+        })
+        await this.dependencies.emailJobs.cancel(existing.id).catch(() => undefined)
+        await this.enqueueInvitation(existing, email, invitationToken)
+        results.push({ email, status: 'queued' })
         continue
       }
 
@@ -67,31 +90,41 @@ export class AdminInvitationService {
         sentAt: null,
         acceptedAt: null,
         deliveryError: null,
+        resendCount: 0,
+        lastResentAt: null,
       })
 
-      try {
-        await this.dependencies.emailJobs.enqueue({
-          type: 'admin-invitation',
-          invitationId: invitation.id,
-          email,
-          invitationToken,
-        })
-        await this.dependencies.notifications.publish({
-          title: 'Admin invitation queued',
-          body: `An administrator invitation for ${email} is queued for delivery.`,
-          link: '/invitations',
-        })
-        results.push({ email, status: 'queued' })
-      } catch (error) {
-        await this.dependencies.invitations.markDeliveryFailed(
-          invitation.id,
-          error instanceof Error ? error.message : 'Failed to enqueue email',
-        )
-        throw error
-      }
+      await this.enqueueInvitation(invitation, email, invitationToken)
+      results.push({ email, status: 'queued' })
     }
 
     return results
+  }
+
+  private async enqueueInvitation(
+    invitation: AdminInvitation,
+    email: string,
+    invitationToken: string,
+  ): Promise<void> {
+    try {
+      await this.dependencies.emailJobs.enqueue({
+        type: 'admin-invitation',
+        invitationId: invitation.id,
+        email,
+        invitationToken,
+      })
+      await this.dependencies.notifications.publish({
+        title: 'Admin invitation queued',
+        body: `An administrator invitation for ${email} is queued for delivery.`,
+        link: '/invitations',
+      })
+    } catch (error) {
+      await this.dependencies.invitations.markDeliveryFailed(
+        invitation.id,
+        error instanceof Error ? error.message : 'Failed to enqueue email',
+      )
+      throw error
+    }
   }
 
   async accept(
