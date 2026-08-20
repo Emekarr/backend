@@ -152,6 +152,36 @@ export const createLiveClassRouter = (dependencies: {
       )
     }),
   )
+  router.post(
+    '/author/live-sessions/:sessionId/leave',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.sessionParams),
+    asyncRoute(async (request, response) => {
+      await dependencies.live.leave(
+        authenticatedAuthor(request),
+        'author',
+        request.params.sessionId as string,
+      )
+      response.status(200).json(null)
+    }),
+  )
+  router.patch(
+    '/author/live-sessions/:sessionId/whiteboard',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.sessionParams),
+    validateBody(schemas.liveWhiteboardState),
+    asyncRoute(async (request, response) => {
+      response.json({
+        session: await dependencies.live.setWhiteboard(
+          authenticatedAuthor(request),
+          request.params.sessionId as string,
+          (request.body as { active: boolean }).active,
+        ),
+      })
+    }),
+  )
   router.patch(
     '/author/live-sessions/:sessionId/me',
     authenticateAuthor(dependencies.authorAuth),
@@ -284,7 +314,6 @@ export const createLiveClassRouter = (dependencies: {
     authenticateStudent(dependencies.studentAuth),
     validateQuery(),
     validateParams(schemas.sessionParams),
-    validateBody(schemas.empty),
     asyncRoute(async (request, response) => {
       await dependencies.live.leave(
         authenticatedStudent(request),

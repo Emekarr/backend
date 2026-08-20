@@ -25,6 +25,8 @@ export const LiveSessionSchema = new Schema<LiveSession>(
     endedAt: { type: Date, default: null },
     expiresAt: { type: Date, default: null },
     whiteboardRoomUuid: { type: String, default: null },
+    whiteboardActive: { type: Boolean, required: true, default: false },
+    whiteboardUsedAt: { type: Date, default: null },
     cameraDefaultOff: { type: Boolean, required: true, default: true },
   },
   baseSchemaOptions,

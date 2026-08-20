@@ -56,14 +56,13 @@ export class R2ObjectStorage implements ObjectStorage {
       Bucket: this.bucket,
       Key: attachmentPath,
       ContentType: input.contentType,
-      Metadata: { 'declared-size': String(input.sizeBytes) },
     })
     return {
       uploadUrl: await getSignedUrl(this.client, command, {
         expiresIn: expiresInSeconds,
-        // Put this metadata into the signed URL so the browser only needs to send Content-Type.
-        // That avoids an extra custom CORS request header for direct R2 uploads.
-        hoistableHeaders: new Set(['x-amz-meta-declared-size']),
+        // Cloudflare's R2 browser-upload flow requires Content-Type to be part of the
+        // signature and the client to send the same header with its PUT request.
+        signableHeaders: new Set(['content-type']),
       }),
       attachmentPath,
       expiresInSeconds,
@@ -79,13 +78,10 @@ export class R2ObjectStorage implements ObjectStorage {
         new HeadObjectCommand({ Bucket: this.bucket, Key: attachmentPath }),
       )
       const expectedExtension = EXTENSIONS[result.ContentType ?? '']
-      const declaredSize = Number(result.Metadata?.['declared-size'])
       return (
         Boolean(expectedExtension) &&
         attachmentPath.endsWith(`.${expectedExtension}`) &&
         typeof result.ContentLength === 'number' &&
-        Number.isSafeInteger(declaredSize) &&
-        result.ContentLength === declaredSize &&
         result.ContentLength > 0 &&
         result.ContentLength <= MAX_COURSE_UPLOAD_BYTES
       )

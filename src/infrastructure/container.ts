@@ -13,6 +13,7 @@ import { AssessmentService } from '../application/assessment/AssessmentService'
 import { CertificateService } from '../application/certificate/CertificateService'
 import { LiveClassService } from '../application/live/LiveClassService'
 import { CourseParticipationService } from '../application/student/CourseParticipationService'
+import { StudentCourseBookmarkService } from '../application/student/StudentCourseBookmarkService'
 import { CoursePaymentService } from '../application/payment/CoursePaymentService'
 import { StudentAuthService } from '../application/student/StudentAuthService'
 import { StudentInvitationService } from '../application/student/StudentInvitationService'
@@ -48,6 +49,7 @@ import type {
   LiveClassRepository,
 } from '../entities/interfaces/liveClassRepository'
 import type { LiveReminderPreferenceRepository } from '../entities/interfaces/liveReminderPreferenceRepository'
+import type { StudentCourseBookmarkRepository } from '../entities/interfaces/studentCourseBookmarkRepository'
 import type { StudentInvitationRepository } from '../entities/interfaces/studentInvitationRepository'
 import type { StudentRepository } from '../entities/interfaces/studentRepository'
 import type { Logger } from '../entities/interfaces/logger'
@@ -100,6 +102,7 @@ import { CoursePaymentRepo } from './repository/mongodb/modelRepos/coursePayment
 import { PaymentAuthorizationRepo } from './repository/mongodb/modelRepos/paymentAuthorizationRepo'
 import { LiveClassRepo } from './repository/mongodb/modelRepos/liveClassRepo'
 import { LiveReminderPreferenceRepo } from './repository/mongodb/modelRepos/liveReminderPreferenceRepo'
+import { StudentCourseBookmarkRepo } from './repository/mongodb/modelRepos/studentCourseBookmarkRepo'
 import { StudentInvitationRepo } from './repository/mongodb/modelRepos/studentInvitationRepo'
 import { StudentRepo } from './repository/mongodb/modelRepos/studentRepo'
 import { ScryptPasswordHasher } from './security/passwordHasher'
@@ -129,6 +132,7 @@ export interface Infrastructure {
   certificateRepository: CertificateRepository
   liveClassRepository: LiveClassRepository
   liveReminderPreferenceRepository: LiveReminderPreferenceRepository
+  studentCourseBookmarkRepository: StudentCourseBookmarkRepository
   cache: Cache
   passwordHasher: PasswordHasher
   emailJobs: EmailJobQueue
@@ -140,6 +144,7 @@ export interface Infrastructure {
   authorInvitationService: AuthorInvitationService
   courseService: CourseService
   liveReminderService: LiveReminderService
+  studentCourseBookmarkService: StudentCourseBookmarkService
   assessmentService: AssessmentService
   certificateService: CertificateService
   courseParticipationService: CourseParticipationService
@@ -230,6 +235,10 @@ Container.set<LiveReminderPreferenceRepository>({
   id: DI_TOKENS.liveReminderPreferenceRepository,
   factory: () => new LiveReminderPreferenceRepo(),
 })
+Container.set<StudentCourseBookmarkRepository>({
+  id: DI_TOKENS.studentCourseBookmarkRepository,
+  factory: () => new StudentCourseBookmarkRepo(),
+})
 Container.set<LiveClassProvider>({
   id: DI_TOKENS.liveClassProvider,
   factory: (container: ContainerInstance) =>
@@ -309,6 +318,7 @@ Container.set<EmailJobQueue & LifecycleService>({
       container.get(DI_TOKENS.authorInvitationRepository),
       container.get(DI_TOKENS.studentInvitationRepository),
       container.get(DI_TOKENS.liveReminderPreferenceRepository),
+      container.get(DI_TOKENS.studentCourseBookmarkRepository),
       container.get(DI_TOKENS.certificateRepository),
       container.get(DI_TOKENS.certificateRenderer),
       container.get(DI_TOKENS.logger),
@@ -418,6 +428,15 @@ Container.set<LiveReminderService>({
     new LiveReminderService({
       courses: container.get(DI_TOKENS.courseCatalogRepository),
       preferences: container.get(DI_TOKENS.liveReminderPreferenceRepository),
+      emailJobs: container.get(DI_TOKENS.emailJobs),
+    }),
+})
+Container.set<StudentCourseBookmarkService>({
+  id: DI_TOKENS.studentCourseBookmarkService,
+  factory: (container: ContainerInstance) =>
+    new StudentCourseBookmarkService({
+      courses: container.get(DI_TOKENS.courseCatalogRepository),
+      bookmarks: container.get(DI_TOKENS.studentCourseBookmarkRepository),
       emailJobs: container.get(DI_TOKENS.emailJobs),
     }),
 })
@@ -578,6 +597,7 @@ Container.set<HttpServer>({
         invitations: container.get(DI_TOKENS.studentInvitationService),
         participation: container.get(DI_TOKENS.courseParticipationService),
         courses: container.get(DI_TOKENS.courseService),
+        bookmarks: container.get(DI_TOKENS.studentCourseBookmarkService),
         rateLimiter: container.get(DI_TOKENS.rateLimiter),
       })
       const liveRouter = createLiveClassRouter({
@@ -596,15 +616,15 @@ Container.set<HttpServer>({
         liveRouter,
       ]
       return new ExpressServer(
-      container.get(DI_TOKENS.config),
-      container.get(DI_TOKENS.logger),
-      [activityAudit(container.get(DI_TOKENS.activityJobs), container.get(DI_TOKENS.logger))],
-      [
-        ...routers,
-        Router().use('/api/admin', createDirectApiRouter('admin', routers)),
-        Router().use('/api/author', createDirectApiRouter('author', routers)),
-        Router().use('/api/student', createDirectApiRouter('student', routers)),
-      ],
+        container.get(DI_TOKENS.config),
+        container.get(DI_TOKENS.logger),
+        [activityAudit(container.get(DI_TOKENS.activityJobs), container.get(DI_TOKENS.logger))],
+        [
+          ...routers,
+          Router().use('/api/admin', createDirectApiRouter('admin', routers)),
+          Router().use('/api/author', createDirectApiRouter('author', routers)),
+          Router().use('/api/student', createDirectApiRouter('student', routers)),
+        ],
       )
     })(),
 })
@@ -631,6 +651,7 @@ export const infrastructure: Infrastructure = Object.freeze({
   certificateRepository: Container.get(DI_TOKENS.certificateRepository),
   liveClassRepository: Container.get(DI_TOKENS.liveClassRepository),
   liveReminderPreferenceRepository: Container.get(DI_TOKENS.liveReminderPreferenceRepository),
+  studentCourseBookmarkRepository: Container.get(DI_TOKENS.studentCourseBookmarkRepository),
   cache: Container.get(DI_TOKENS.cache),
   passwordHasher: Container.get(DI_TOKENS.passwordHasher),
   emailJobs: Container.get(DI_TOKENS.emailJobs),
@@ -643,6 +664,7 @@ export const infrastructure: Infrastructure = Object.freeze({
   authorInvitationService: Container.get(DI_TOKENS.authorInvitationService),
   courseService: Container.get(DI_TOKENS.courseService),
   liveReminderService: Container.get(DI_TOKENS.liveReminderService),
+  studentCourseBookmarkService: Container.get(DI_TOKENS.studentCourseBookmarkService),
   assessmentService: Container.get(DI_TOKENS.assessmentService),
   certificateService: Container.get(DI_TOKENS.certificateService),
   courseParticipationService: Container.get(DI_TOKENS.courseParticipationService),

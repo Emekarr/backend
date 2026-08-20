@@ -19,7 +19,16 @@ export interface LiveClassRepository {
   updateSession(
     id: string,
     patch: Partial<
-      Pick<LiveSession, 'status' | 'startedAt' | 'endedAt' | 'expiresAt' | 'whiteboardRoomUuid'>
+      Pick<
+        LiveSession,
+        | 'status'
+        | 'startedAt'
+        | 'endedAt'
+        | 'expiresAt'
+        | 'whiteboardRoomUuid'
+        | 'whiteboardActive'
+        | 'whiteboardUsedAt'
+      >
     >,
   ): Promise<LiveSession>
   upsertParticipant(
@@ -53,6 +62,7 @@ export interface LiveClassRepository {
     sessionId: string,
     patch: Partial<Pick<LiveParticipant, 'microphoneOn' | 'cameraOn'>>,
   ): Promise<void>
+  markStaleParticipantsLeft(sessionId: string, lastSeenBefore: Date, leftAt: Date): Promise<void>
   createMessage(input: {
     sessionId: string
     courseId: string | null

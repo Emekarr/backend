@@ -12,6 +12,7 @@ import type { CourseParticipationService } from '../../application/student/Cours
 import type { CoursePaymentService } from '../../application/payment/CoursePaymentService'
 import type { StudentAuthService } from '../../application/student/StudentAuthService'
 import type { StudentInvitationService } from '../../application/student/StudentInvitationService'
+import type { StudentCourseBookmarkService } from '../../application/student/StudentCourseBookmarkService'
 import type { StartupService } from '../../application/startup'
 import type { AdminInvitationRepository } from '../../entities/interfaces/adminInvitationRepository'
 import type { AdminRepository } from '../../entities/interfaces/adminRepository'
@@ -46,6 +47,7 @@ import type {
   LiveClassRepository,
 } from '../../entities/interfaces/liveClassRepository'
 import type { LiveReminderPreferenceRepository } from '../../entities/interfaces/liveReminderPreferenceRepository'
+import type { StudentCourseBookmarkRepository } from '../../entities/interfaces/studentCourseBookmarkRepository'
 import type { StudentInvitationRepository } from '../../entities/interfaces/studentInvitationRepository'
 import type { StudentRepository } from '../../entities/interfaces/studentRepository'
 import type { Logger } from '../../entities/interfaces/logger'
@@ -96,6 +98,9 @@ export const DI_TOKENS = Object.freeze({
   liveReminderPreferenceRepository: new Token<LiveReminderPreferenceRepository>(
     'repository.live-reminder-preference',
   ),
+  studentCourseBookmarkRepository: new Token<StudentCourseBookmarkRepository>(
+    'repository.student-course-bookmark',
+  ),
   studentRepository: new Token<StudentRepository>('repository.student'),
   studentInvitationRepository: new Token<StudentInvitationRepository>(
     'repository.student-invitation',
@@ -121,6 +126,9 @@ export const DI_TOKENS = Object.freeze({
   authorInvitationService: new Token<AuthorInvitationService>('application.author-invitations'),
   courseService: new Token<CourseService>('application.course'),
   liveReminderService: new Token<LiveReminderService>('application.live-reminder'),
+  studentCourseBookmarkService: new Token<StudentCourseBookmarkService>(
+    'application.student-course-bookmark',
+  ),
   assessmentService: new Token<AssessmentService>('application.assessment'),
   certificateService: new Token<CertificateService>('application.certificate'),
   liveClassService: new Token<LiveClassService>('application.live-class'),

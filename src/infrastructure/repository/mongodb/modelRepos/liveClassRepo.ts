@@ -91,6 +91,20 @@ export class LiveClassRepo implements LiveClassRepository {
   ) {
     await this.participants.updateMany({ sessionId, leftAt: null }, patch).exec()
   }
+  async markStaleParticipantsLeft(sessionId: string, lastSeenBefore: Date, leftAt: Date) {
+    await this.participants
+      .updateMany(
+        { sessionId, leftAt: null, lastSeenAt: { $lt: lastSeenBefore } },
+        {
+          leftAt,
+          microphoneOn: false,
+          cameraOn: false,
+          screenSharing: false,
+          handRaised: false,
+        },
+      )
+      .exec()
+  }
   async createMessage(input: Parameters<LiveClassRepository['createMessage']>[0]) {
     return clean<LiveMessage>((await this.messages.create(input)).toObject())
   }

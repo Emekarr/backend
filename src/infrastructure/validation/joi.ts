@@ -341,6 +341,7 @@ export const schemas = {
   })
     .min(1)
     .unknown(false),
+  liveWhiteboardState: Joi.object({ active: Joi.boolean().required() }).unknown(false),
   liveMessage: Joi.object({
     kind: Joi.string().valid('chat', 'reaction').required(),
     body: plainText(2000).required(),

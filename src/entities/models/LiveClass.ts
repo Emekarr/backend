@@ -14,6 +14,8 @@ export interface LiveSession extends BaseEntity {
   endedAt: Date | null
   expiresAt: Date | null
   whiteboardRoomUuid: string | null
+  whiteboardActive: boolean
+  whiteboardUsedAt: Date | null
   cameraDefaultOff: boolean
 }
 

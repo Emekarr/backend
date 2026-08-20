@@ -80,6 +80,8 @@ export class LiveClassService {
       endedAt: null,
       expiresAt: null,
       whiteboardRoomUuid: null,
+      whiteboardActive: false,
+      whiteboardUsedAt: null,
       cameraDefaultOff: true,
     })
   }
@@ -134,6 +136,7 @@ export class LiveClassService {
     return this.dependencies.live.updateSession(session.id, {
       status: 'ended',
       endedAt: new Date(),
+      whiteboardActive: false,
     })
   }
 
@@ -181,6 +184,7 @@ export class LiveClassService {
 
   async stateForAuthor(author: Author, sessionId: string) {
     const session = await this.settleExpired(await this.requireAuthorSession(author.id, sessionId))
+    await this.heartbeat(session.id, 'author', author.id)
     return this.state(session)
   }
 
@@ -193,7 +197,23 @@ export class LiveClassService {
         403,
       )
     await this.requireEnrollment(student.id, session.courseId)
+    await this.heartbeat(session.id, 'student', student.id)
     return this.state(session, after)
+  }
+
+  async setWhiteboard(author: Author, sessionId: string, active: boolean) {
+    const session = await this.settleExpired(await this.requireAuthorSession(author.id, sessionId))
+    if (session.status !== 'live') throw conflict('The whiteboard is only available while live')
+    if (!session.whiteboardRoomUuid)
+      throw new ApplicationError(
+        'The whiteboard is not configured for this class',
+        'WHITEBOARD_NOT_CONFIGURED',
+        422,
+      )
+    return this.dependencies.live.updateSession(session.id, {
+      whiteboardActive: active,
+      ...(active && !session.whiteboardUsedAt ? { whiteboardUsedAt: new Date() } : {}),
+    })
   }
 
   async updateSelf(
@@ -316,7 +336,7 @@ export class LiveClassService {
         session.channelName,
         participant.rtcUid,
         ['join_channel'],
-        input.action === 'ban' ? 1440 : 1,
+        input.action === 'ban' ? 1440 : 0,
       )
     }
   }
@@ -511,6 +531,7 @@ export class LiveClassService {
           session.expiresAt ?? undefined,
         ),
         whiteboard: await this.whiteboard(session, `recorder-${recording.id}`, false),
+        whiteboardActive: session.whiteboardActive,
       }
     })
   }
@@ -569,11 +590,29 @@ export class LiveClassService {
   }
 
   private async state(session: LiveSession, after?: Date) {
+    const now = new Date()
+    await this.dependencies.live.markStaleParticipantsLeft(
+      session.id,
+      new Date(now.getTime() - 150_000),
+      now,
+    )
     return {
       session,
       participants: await this.dependencies.live.listParticipants(session.id),
       messages: await this.dependencies.live.listMessages(session.id, after),
     }
+  }
+  private async heartbeat(sessionId: string, actorType: LiveActorType, actorId: string) {
+    const participant = await this.dependencies.live.findParticipantByActor(
+      sessionId,
+      actorType,
+      actorId,
+    )
+    if (!participant || participant.kickedAt || participant.bannedAt) return
+    await this.dependencies.live.updateParticipant(participant.id, {
+      leftAt: null,
+      lastSeenAt: new Date(),
+    })
   }
   private async settleExpired(session: LiveSession): Promise<LiveSession> {
     if (session.status !== 'live' || !session.expiresAt || session.expiresAt.getTime() > Date.now())
@@ -581,6 +620,7 @@ export class LiveClassService {
     return this.dependencies.live.updateSession(session.id, {
       status: 'ended',
       endedAt: session.expiresAt,
+      whiteboardActive: false,
     })
   }
   private async requireOwnedCourse(authorId: string, courseId: string) {

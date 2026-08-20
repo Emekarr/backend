@@ -148,7 +148,20 @@ export class CourseService {
   }
 
   async getPreview(courseId: string): Promise<CoursePreview> {
-    const aggregate = await this.getAvailable(courseId)
+    const aggregate = await this.dependencies.courses.findById(courseId)
+    if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    // Future live courses remain previewable so learners can see their schedule
+    // and bookmark them. Scheduled premade content remains hidden until release.
+    if (
+      aggregate.course.type !== 'live' &&
+      aggregate.course.scheduledAt &&
+      aggregate.course.scheduledAt.getTime() > Date.now()
+    )
+      throw new ApplicationError(
+        `Course will be available on ${aggregate.course.scheduledAt.toISOString()}`,
+        'COURSE_NOT_AVAILABLE',
+        403,
+      )
     return {
       course: aggregate.course,
       modules: aggregate.modules.map(({ id, courseId: moduleCourseId, title, order }) => ({
@@ -174,12 +187,13 @@ export class CourseService {
   async listAvailable(query = '') {
     const courses = await this.dependencies.courses.findAvailable(new Date())
     const authorIds = [...new Set(courses.map((course) => course.createdByAuthorId))]
-    const authors = await Promise.all(authorIds.map((authorId) => this.dependencies.authors.findById(authorId)))
+    const authors = await Promise.all(
+      authorIds.map((authorId) => this.dependencies.authors.findById(authorId)),
+    )
     const authorNames = new Map(
-      authors.filter((author): author is NonNullable<typeof author> => Boolean(author)).map((author) => [
-        author.id,
-        `${author.firstName} ${author.lastName}`,
-      ]),
+      authors
+        .filter((author): author is NonNullable<typeof author> => Boolean(author))
+        .map((author) => [author.id, `${author.firstName} ${author.lastName}`]),
     )
     const normalizedQuery = query.trim().toLocaleLowerCase()
     return courses
@@ -203,9 +217,7 @@ export class CourseService {
       this.listAvailable(),
       this.dependencies.participation.getAuthorRatingSummary(author.id),
     ])
-    const courses = availableCourses.filter(
-      (course) => course.createdByAuthorId === author.id,
-    )
+    const courses = availableCourses.filter((course) => course.createdByAuthorId === author.id)
     return {
       author: {
         id: author.id,

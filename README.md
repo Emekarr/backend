@@ -214,6 +214,8 @@ and progress require an authenticated student.
 | POST   | `/student/auth/forgot-password`                                 | Public                  | Email a one-time reset code              |
 | POST   | `/student/auth/reset-password`                                  | Public                  | Consume reset code and change password   |
 | POST   | `/student/courses/:courseId/enroll`                             | Student + free course   | Enroll idempotently                      |
+| PUT    | `/student/courses/:courseId/bookmark`                           | Student access token    | Toggle 30/10-minute live reminders       |
+| GET    | `/student/course-bookmarks`                                     | Student access token    | List active scheduled-course bookmarks  |
 | POST   | `/student/courses/:courseId/payments/paystack/initialize`       | Student + paid course   | Create or resume a Paystack checkout     |
 | GET    | `/student/payments`                                             | Student access token    | List saved cards and transaction history |
 | POST   | `/student/payment-methods/paystack/setup`                       | Student access token    | Start hosted card verification           |
@@ -340,16 +342,14 @@ R2_SECRET_ACCESS_KEY=your-r2-secret-key
 R2_BUCKET_NAME=your-course-assets-bucket
 ```
 
-Signed R2 URLs permit one `PUT` operation for five minutes and bind both the allowed content type
-and declared byte size. Upload clients must send every header returned in `requiredHeaders`. Since
-uploads happen directly from a browser, configure a CORS policy on the R2 bucket that allows the
-author application's exact origin, `PUT` (and `GET`/`HEAD` for signed downloads), and these
-request headers: `content-type` and `x-amz-meta-declared-size`. The declared size is retained in
-the presigned request's signed-header list, so it must not also appear as a query parameter. The
-server generates every object key under the authenticated author prefix. Attachment creation then
-uses the returned `attachmentPath`; R2 `HEAD` verification confirms that the object exists, its
-actual byte size matches the signed declaration, its content type matches its generated extension,
-and it is no larger than 100 MiB. Available-course attachments use five-minute signed `GET` URLs.
+Signed R2 URLs permit one `PUT` operation for 15 minutes and bind the allowed content type. The
+browser uploads the raw file directly to the R2 S3 API URL with `PUT` and the same `Content-Type`
+header used to create the signature. Configure the bucket CORS policy to allow the author
+application's exact origin, the `PUT` method, and the `Content-Type` request header. The server
+generates every object key under the authenticated author prefix. Attachment creation then uses the
+returned `attachmentPath`; R2 `HEAD` verification confirms that the object exists, its content type
+matches its generated extension, and its actual size is between one byte and 1 GiB. Available-course
+attachments use five-minute signed `GET` URLs.
 
 TOTP secrets are encrypted at rest with AES-256-GCM. Password-reset and invitation values are
 stored as keyed hashes; password-reset codes expire after ten minutes and are atomically consumed.

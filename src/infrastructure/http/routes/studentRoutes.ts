@@ -8,19 +8,14 @@ import type {
   StudentProfileUpdate,
 } from '../../../application/student/StudentAuthService'
 import type { StudentInvitationService } from '../../../application/student/StudentInvitationService'
+import type { StudentCourseBookmarkService } from '../../../application/student/StudentCourseBookmarkService'
 import type { RateLimiter } from '../../../entities/interfaces/auth'
 import type { Admin } from '../../../entities/models/Admin'
 import type { Author } from '../../../entities/models/Author'
 import type { Student } from '../../../entities/models/Student'
 import { ApplicationError } from '../../../entities/errors/applicationError'
 import { setActivity } from '../activityAudit'
-import {
-  clearSession,
-  sessionToken,
-  setChallenge,
-  setSession,
-  setSetup,
-} from '../sessionCookies'
+import { clearSession, sessionToken, setChallenge, setSession, setSetup } from '../sessionCookies'
 import { schemas, validateBody, validateParams, validateQuery } from '../../validation/joi'
 
 type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>
@@ -35,6 +30,7 @@ export const createStudentRouter = (dependencies: {
   invitations: StudentInvitationService
   participation: CourseParticipationService
   courses: CourseService
+  bookmarks: StudentCourseBookmarkService
   rateLimiter: RateLimiter
 }): Router => {
   const router = Router()
@@ -48,7 +44,8 @@ export const createStudentRouter = (dependencies: {
       const body = request.body as { email: string; password: string }
       setActivity(request, { action: 'student.login', actorEmail: body.email })
       const result = await dependencies.studentAuth.login(body.email, body.password)
-      if (result.status === 'two-factor-required') setChallenge(response, 'student', result.challengeToken)
+      if (result.status === 'two-factor-required')
+        setChallenge(response, 'student', result.challengeToken)
       else setSetup(response, 'student', result.setupToken)
       const next = result.status === 'two-factor-required' ? '/two-factor' : '/two-factor/setup'
       response.status(202).json({ ...result, next })
@@ -62,7 +59,7 @@ export const createStudentRouter = (dependencies: {
     limit(dependencies.rateLimiter, 'student-refresh', 30, 60),
     asyncRoute(async (request, response) => {
       const tokens = await dependencies.studentAuth.refresh(bearer(request, 'refresh'))
-setSession(response, 'student', tokens)
+      setSession(response, 'student', tokens)
       response.json({ ...tokens, next: '/dashboard' })
     }),
   )
@@ -351,6 +348,40 @@ setSession(response, 'student', tokens)
         .json(
           await dependencies.participation.enroll((request as StudentRequest).student, courseId),
         )
+    }),
+  )
+
+  router.put(
+    '/student/courses/:courseId/bookmark',
+    authenticateStudent(dependencies.studentAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    validateBody(schemas.reminderPreference),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const { enabled } = request.body as { enabled: boolean }
+      setActivity(request, {
+        action: 'course.bookmark.update',
+        metadata: { courseId, enabled },
+      })
+      response.status(200).json({
+        bookmark: await dependencies.bookmarks.set(
+          (request as StudentRequest).student,
+          courseId,
+          enabled,
+        ),
+      })
+    }),
+  )
+
+  router.get(
+    '/student/course-bookmarks',
+    authenticateStudent(dependencies.studentAuth),
+    validateQuery(),
+    asyncRoute(async (request, response) => {
+      response
+        .status(200)
+        .json(await dependencies.bookmarks.list((request as StudentRequest).student))
     }),
   )
 

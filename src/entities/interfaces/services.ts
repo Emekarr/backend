@@ -56,6 +56,16 @@ export interface LiveReminderEmailJob {
   scheduledAt: string
 }
 
+export interface StudentLiveReminderEmailJob {
+  type: 'student-live-reminder'
+  studentId: string
+  courseId: string
+  email: string
+  courseName: string
+  scheduledAt: string
+  leadMinutes: 30 | 10
+}
+
 export type EmailJob =
   | PasswordResetEmailJob
   | AdminInvitationEmailJob
@@ -63,6 +73,7 @@ export type EmailJob =
   | StudentInvitationEmailJob
   | CertificateEmailJob
   | LiveReminderEmailJob
+  | StudentLiveReminderEmailJob
 
 export interface EmailJobQueue {
   enqueue(job: EmailJob): Promise<void>

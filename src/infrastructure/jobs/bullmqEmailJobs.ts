@@ -4,6 +4,7 @@ import type { AdminInvitationRepository } from '../../entities/interfaces/adminI
 import type { AuthorInvitationRepository } from '../../entities/interfaces/authorInvitationRepository'
 import type { StudentInvitationRepository } from '../../entities/interfaces/studentInvitationRepository'
 import type { LiveReminderPreferenceRepository } from '../../entities/interfaces/liveReminderPreferenceRepository'
+import type { StudentCourseBookmarkRepository } from '../../entities/interfaces/studentCourseBookmarkRepository'
 import type {
   CertificateDocumentRenderer,
   CertificateRepository,
@@ -20,6 +21,7 @@ import { invitationEmail } from '../email/templates/invitation'
 import { passwordResetEmail } from '../email/templates/passwordReset'
 import { certificateEmail } from '../email/templates/certificate'
 import { liveReminderEmail } from '../email/templates/liveReminder'
+import { studentLiveReminderEmail } from '../email/templates/studentLiveReminder'
 
 export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
   private queue?: Queue<EmailJob>
@@ -35,6 +37,7 @@ export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
     private readonly authorInvitations: AuthorInvitationRepository,
     private readonly studentInvitations: StudentInvitationRepository,
     private readonly reminders: LiveReminderPreferenceRepository,
+    private readonly studentBookmarks: StudentCourseBookmarkRepository,
     private readonly certificates: CertificateRepository,
     private readonly certificateRenderer: CertificateDocumentRenderer,
     private readonly logger: Logger,
@@ -174,6 +177,31 @@ export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
       return
     }
 
+    if (job.data.type === 'student-live-reminder') {
+      try {
+        await this.emailSender.send({
+          to: job.data.email,
+          subject: `${job.data.courseName} starts in ${job.data.leadMinutes} minutes`,
+          html: studentLiveReminderEmail(job.data),
+        })
+        await this.studentBookmarks.markDelivered(
+          job.data.studentId,
+          job.data.courseId,
+          job.data.leadMinutes,
+          new Date(),
+        )
+      } catch (error) {
+        await this.studentBookmarks.markDeliveryFailed(
+          job.data.studentId,
+          job.data.courseId,
+          job.data.leadMinutes,
+          error instanceof Error ? error.message : 'Unknown delivery error',
+        )
+        throw error
+      }
+      return
+    }
+
     if (job.data.type === 'password-reset') {
       await this.emailSender.send({
         to: job.data.email,
@@ -258,6 +286,13 @@ export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
 const emailJobContext = (job: EmailJob) => {
   if (job.type === 'live-reminder')
     return { jobType: job.type, authorId: job.authorId, courseId: job.courseId }
+  if (job.type === 'student-live-reminder')
+    return {
+      jobType: job.type,
+      studentId: job.studentId,
+      courseId: job.courseId,
+      leadMinutes: job.leadMinutes,
+    }
   if (job.type === 'certificate') return { jobType: job.type, certificateId: job.certificateId }
   if (job.type === 'password-reset') return { jobType: job.type }
   return { jobType: job.type, invitationId: job.invitationId }
