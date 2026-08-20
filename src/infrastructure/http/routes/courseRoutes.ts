@@ -30,6 +30,50 @@ export const createCourseRouter = (dependencies: {
     }),
   )
 
+  router.get(
+    '/author/courses/:courseId/attachments/:attachmentId/view',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.courseAttachmentParams),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const attachmentId = request.params.attachmentId as string
+      setActivity(request, {
+        action: 'course.attachment.view',
+        metadata: { courseId, attachmentId },
+      })
+      response.json(
+        await dependencies.courses.createOwnedAttachmentView(
+          authenticatedAuthor(request),
+          courseId,
+          attachmentId,
+        ),
+      )
+    }),
+  )
+
+  router.get(
+    '/author/courses/:courseId/attachments/:attachmentId/download',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.courseAttachmentParams),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const attachmentId = request.params.attachmentId as string
+      setActivity(request, {
+        action: 'course.attachment.download',
+        metadata: { courseId, attachmentId },
+      })
+      response.json(
+        await dependencies.courses.createOwnedAttachmentDownload(
+          authenticatedAuthor(request),
+          courseId,
+          attachmentId,
+        ),
+      )
+    }),
+  )
+
   router.put(
     '/author/courses/:courseId/reminder-preferences',
     authenticateAuthor(dependencies.authorAuth),
@@ -60,6 +104,18 @@ export const createCourseRouter = (dependencies: {
     asyncRoute(async (request, response) => {
       setActivity(request, { action: 'course.reminder-preference.list' })
       response.status(200).json(await dependencies.reminders.list(authenticatedAuthor(request)))
+    }),
+  )
+
+  router.get(
+    '/author/courses/:courseId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      setActivity(request, { action: 'course.get-owned', metadata: { courseId } })
+      response.json(await dependencies.courses.getOwned(authenticatedAuthor(request), courseId))
     }),
   )
 

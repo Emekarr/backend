@@ -280,11 +280,15 @@ export const schemas = {
               .required(),
             otherwise: Joi.array().max(0).required(),
           }),
-          correctOptionIds: Joi.array()
-            .items(Joi.string().pattern(/^[A-Za-z0-9_-]{1,100}$/))
-            .max(6)
-            .unique()
-            .required(),
+          correctOptionIds: Joi.when('type', {
+            is: 'multiple_choice',
+            then: Joi.array()
+              .items(Joi.string().pattern(/^[A-Za-z0-9_-]{1,100}$/))
+              .length(1)
+              .unique()
+              .required(),
+            otherwise: Joi.array().max(0).required(),
+          }),
           mediaType: Joi.string().valid('image', 'video', 'audio').allow(null).optional(),
           mediaUrl: Joi.alternatives()
             .try(

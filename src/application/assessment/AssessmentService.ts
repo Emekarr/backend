@@ -126,14 +126,16 @@ export class AssessmentService {
           'INVALID_CORRECT_ANSWER',
           400,
         )
-      if (
-        question.type === 'multiple_choice' &&
-        !input.manualReview &&
-        question.correctOptionIds.length === 0
-      )
+      if (question.type === 'multiple_choice' && question.correctOptionIds.length !== 1)
         throw new ApplicationError(
-          'Automatically marked multiple-choice questions need a correct answer',
-          'CORRECT_ANSWER_REQUIRED',
+          'Multiple-choice questions must have exactly one correct answer',
+          'EXACTLY_ONE_CORRECT_ANSWER_REQUIRED',
+          400,
+        )
+      if (question.type === 'free_text' && question.correctOptionIds.length)
+        throw new ApplicationError(
+          'Written-response questions cannot include a selected answer',
+          'INVALID_CORRECT_ANSWER',
           400,
         )
       return {

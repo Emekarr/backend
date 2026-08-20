@@ -184,6 +184,10 @@ export class CourseService {
     return this.dependencies.courses.findByAuthor(author.id)
   }
 
+  async getOwned(author: Author, courseId: string): Promise<CourseAggregate> {
+    return this.ownedCourse(author, courseId)
+  }
+
   async listAvailable(query = '') {
     const courses = await this.dependencies.courses.findAvailable(new Date())
     const authorIds = [...new Set(courses.map((course) => course.createdByAuthorId))]
@@ -255,6 +259,27 @@ export class CourseService {
         attachment.fileName ?? attachment.attachmentPath.split('/').at(-1) ?? 'Course attachment',
       viewOnly: true,
     }
+  }
+
+  async createOwnedAttachmentView(author: Author, courseId: string, attachmentId: string) {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const attachment = aggregate.attachments.find((item) => item.id === attachmentId)
+    if (!attachment)
+      throw new ApplicationError('Course attachment not found', 'ATTACHMENT_NOT_FOUND', 404)
+    return {
+      ...(await this.dependencies.storage.createSignedView(attachment.attachmentPath)),
+      fileName:
+        attachment.fileName ?? attachment.attachmentPath.split('/').at(-1) ?? 'Course attachment',
+      viewOnly: true,
+    }
+  }
+
+  async createOwnedAttachmentDownload(author: Author, courseId: string, attachmentId: string) {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const attachment = aggregate.attachments.find((item) => item.id === attachmentId)
+    if (!attachment)
+      throw new ApplicationError('Course attachment not found', 'ATTACHMENT_NOT_FOUND', 404)
+    return this.dependencies.storage.createSignedDownload(attachment.attachmentPath)
   }
 
   async createSignedUpload(
