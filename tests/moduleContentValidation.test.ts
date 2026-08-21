@@ -21,7 +21,26 @@ test('module validation accepts a meaningful Tiptap document', () => {
       },
       {
         type: 'paragraph',
-        content: [{ type: 'text', text: 'Understand the fundamentals.' }],
+        content: [
+          {
+            type: 'text',
+            text: 'Understand the fundamentals.',
+            marks: [
+              { type: 'textStyle', attrs: { color: '#2563eb', fontSize: '18px' } },
+              { type: 'highlight', attrs: { color: '#fff59d' } },
+            ],
+          },
+        ],
+      },
+      {
+        type: 'taskList',
+        content: [
+          {
+            type: 'taskItem',
+            attrs: { checked: false },
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Practise' }] }],
+          },
+        ],
       },
     ],
   })

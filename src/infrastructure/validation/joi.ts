@@ -27,6 +27,8 @@ const tiptapNodeTypes = new Set([
   'bulletList',
   'orderedList',
   'listItem',
+  'taskList',
+  'taskItem',
   'blockquote',
   'codeBlock',
   'hardBreak',
@@ -37,7 +39,18 @@ const tiptapNodeTypes = new Set([
   'tableHeader',
   'tableCell',
 ])
-const tiptapMarkTypes = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link'])
+const tiptapMarkTypes = new Set([
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'code',
+  'link',
+  'textStyle',
+  'highlight',
+  'subscript',
+  'superscript',
+])
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
