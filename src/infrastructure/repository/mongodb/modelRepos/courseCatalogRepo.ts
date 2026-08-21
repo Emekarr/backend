@@ -172,6 +172,82 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
       .exec()
     return (result.deletedCount ?? 0) > 0
   }
+
+  async editCourse(
+    course: Course,
+    input: Parameters<CourseCatalogRepository['editCourse']>[1],
+  ): Promise<CourseAggregate> {
+    const updatedCourse = await this.updateCourse(course.id, input.scalars)
+    if (!updatedCourse) return this.findById(course.id) as Promise<CourseAggregate>
+
+    const keepModuleIds = input.modules.map((item) => item.id).filter((id): id is string => !!id)
+    const keepAttachmentIds = input.attachments
+      .map((item) => item.id)
+      .filter((id): id is string => !!id)
+
+    await Promise.all([
+      this.modules.deleteMany({ courseId: course.id, id: { $nin: keepModuleIds } }).exec(),
+      this.attachments.deleteMany({ courseId: course.id, id: { $nin: keepAttachmentIds } }).exec(),
+    ])
+
+    // Upsert modules in payload order; new modules are appended and every module
+    // ends with an `order` matching its position in the payload.
+    const moduleIdsByIndex: Array<string | null> = []
+    for (const [index, module] of input.modules.entries()) {
+      if (module.id) {
+        await this.modules
+          .updateOne(
+            { id: module.id, courseId: course.id },
+            { $set: { title: module.title, content: module.content, order: index } },
+            { runValidators: true },
+          )
+          .exec()
+        moduleIdsByIndex[index] = module.id
+      } else {
+        const created = await this.modules.create({
+          title: module.title,
+          content: module.content,
+          courseId: course.id,
+          order: index,
+        })
+        moduleIdsByIndex[index] = created.id
+      }
+    }
+    const finalModuleIds = moduleIdsByIndex.filter((id): id is string => !!id)
+    const resolveModuleId = (
+      moduleId: string | null,
+      moduleIndex: number | null,
+    ): string | null => {
+      if (moduleIndex != null) return moduleIdsByIndex[moduleIndex] ?? null
+      return moduleId
+    }
+
+    for (const attachment of input.attachments) {
+      const moduleId = resolveModuleId(attachment.moduleId, attachment.moduleIndex)
+      const orphaned = moduleId != null && !finalModuleIds.includes(moduleId)
+      if (attachment.attachmentPath && !attachment.id) {
+        if (orphaned) continue
+        await this.attachments.create({
+          attachmentPath: attachment.attachmentPath,
+          fileName: attachment.fileName,
+          courseId: course.id,
+          courseName: updatedCourse.name,
+          moduleId,
+        })
+      } else if (attachment.id && !attachment.attachmentPath) {
+        await this.attachments
+          .updateOne(
+            { id: attachment.id, courseId: course.id },
+            { $set: { moduleId: orphaned ? null : moduleId } },
+          )
+          .exec()
+      }
+    }
+
+    const aggregate = await this.findById(course.id)
+    if (!aggregate) throw new Error('The course could not be reloaded after the update')
+    return aggregate
+  }
 }
 
 // A previous application used the same Mongo collection with a different shape

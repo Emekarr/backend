@@ -279,6 +279,50 @@ export const schemas = {
     }),
     scheduledAt: Joi.string().isoDate().allow(null).required(),
   }).unknown(false),
+  courseEdit: Joi.object({
+    name: plainText(160).required(),
+    durationMinutes: Joi.number().integer().min(1).max(100000).required(),
+    type: Joi.string().valid('live', 'premade').required(),
+    liveCallDurationMinutes: Joi.when('type', {
+      is: 'live',
+      then: Joi.number().integer().min(10).max(300).multiple(10).required(),
+      otherwise: Joi.valid(null).required(),
+    }),
+    certificateOnCompletion: Joi.boolean().required(),
+    accessType: Joi.string().valid('free', 'paid').required(),
+    priceNaira: Joi.when('accessType', {
+      is: 'paid',
+      then: Joi.number().min(0.01).max(10_000_000).precision(2).strict().required(),
+      otherwise: Joi.number().valid(0).required(),
+    }),
+    scheduledAt: Joi.string().isoDate().allow(null).required(),
+    modules: Joi.array()
+      .items(
+        Joi.object({
+          id: id.optional(),
+          title: plainText(200).required(),
+          content: moduleContent.required(),
+        }).unknown(false),
+      )
+      .max(100)
+      .required(),
+    attachments: Joi.array()
+      .items(
+        Joi.object({
+          id: id.optional(),
+          attachmentPath: Joi.string()
+            .pattern(
+              /^courses\/[0-9A-HJKMNP-TV-Z]{26}\/[0-9A-HJKMNP-TV-Z]{26}\.(pdf|jpg|png|svg|gif|webp|mp4|mov|webm|mp3|wav|m4a|ogg|txt|csv|doc|docx|ppt|pptx|xls|xlsx|zip)$/,
+            )
+            .optional(),
+          fileName: plainText(200).allow(null).optional(),
+          moduleId: id.allow(null).optional(),
+          moduleIndex: Joi.number().integer().min(0).optional(),
+        }).unknown(false),
+      )
+      .max(10)
+      .required(),
+  }).unknown(false),
   liveSessionCreate: Joi.object({
     courseId: id.allow(null).required(),
     scheduledAt: Joi.string().isoDate().allow(null).optional(),

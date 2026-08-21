@@ -3,6 +3,7 @@ import type { AuthorAuthService } from '../../../application/author/AuthorAuthSe
 import type {
   CourseService,
   CreateCourseInput,
+  EditCourseInput,
   UpdateCourseInput,
 } from '../../../application/course/CourseService'
 import type { CourseParticipationService } from '../../../application/student/CourseParticipationService'
@@ -134,6 +135,27 @@ export const createCourseRouter = (dependencies: {
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
       })
       response.status(201).json(course)
+    }),
+  )
+
+  router.put(
+    '/author/courses/:courseId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    validateBody(schemas.courseEdit),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const body = request.body as Omit<EditCourseInput, 'scheduledAt'> & {
+        scheduledAt: string | null
+      }
+      setActivity(request, { action: 'course.edit', metadata: { courseId } })
+      response.status(200).json(
+        await dependencies.courses.edit(authenticatedAuthor(request), courseId, {
+          ...body,
+          scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+        }),
+      )
     }),
   )
 

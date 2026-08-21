@@ -30,6 +30,25 @@ export interface CreateCourseInput {
 
 export type UpdateCourseInput = Omit<CreateCourseInput, 'modules' | 'attachments'>
 
+export interface EditCourseInput {
+  name: string
+  durationMinutes: number
+  type: CourseType
+  liveCallDurationMinutes: number | null
+  certificateOnCompletion: boolean
+  scheduledAt?: Date | null
+  accessType: CourseAccessType
+  priceNaira: number
+  modules: Array<{ id?: string | null; title: string; content: string }>
+  attachments: Array<{
+    id?: string | null
+    attachmentPath?: string | null
+    fileName?: string | null
+    moduleId?: string | null
+    moduleIndex?: number | null
+  }>
+}
+
 export interface CoursePreview {
   course: CourseAggregate['course']
   modules: Array<Pick<CourseAggregate['modules'][number], 'id' | 'courseId' | 'title' | 'order'>>
@@ -144,6 +163,58 @@ export class CourseService {
     const aggregate = await this.dependencies.courses.findById(courseId)
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
     return aggregate
+  }
+
+  async edit(author: Author, courseId: string, input: EditCourseInput): Promise<CourseAggregate> {
+    const aggregate = await this.ownedCourse(author, courseId)
+    this.assertLiveClassDuration(input.type, input.liveCallDurationMinutes)
+    const priceKobo = this.priceInKobo(input.accessType, input.priceNaira)
+    this.assertAttachmentLimit(input.attachments.length)
+    for (const attachment of input.attachments) {
+      if (Boolean(attachment.id) === Boolean(attachment.attachmentPath))
+        throw new ApplicationError(
+          'Each attachment must either reference an existing attachment or provide a new upload',
+          'INVALID_ATTACHMENT',
+          400,
+        )
+      if (attachment.attachmentPath)
+        await this.assertAttachments(author.id, [attachment.attachmentPath])
+      if (
+        attachment.moduleIndex != null &&
+        (!Number.isInteger(attachment.moduleIndex) ||
+          attachment.moduleIndex < 0 ||
+          attachment.moduleIndex >= input.modules.length)
+      )
+        throw new ApplicationError(
+          'A module attachment must reference a module in this course',
+          'INVALID_ATTACHMENT_MODULE',
+          400,
+        )
+    }
+    return this.dependencies.courses.editCourse(aggregate.course, {
+      scalars: {
+        name: input.name.trim(),
+        durationMinutes: input.durationMinutes,
+        type: input.type,
+        liveCallDurationMinutes: input.liveCallDurationMinutes,
+        certificateOnCompletion: input.certificateOnCompletion,
+        scheduledAt: input.scheduledAt ?? null,
+        accessType: input.accessType,
+        priceKobo,
+      },
+      modules: input.modules.map((module) => ({
+        id: module.id ?? null,
+        title: module.title.trim(),
+        content: module.content.trim(),
+      })),
+      attachments: input.attachments.map((attachment) => ({
+        id: attachment.id ?? null,
+        attachmentPath: attachment.attachmentPath ?? null,
+        fileName: attachment.fileName ?? null,
+        moduleId: attachment.moduleId ?? null,
+        moduleIndex: attachment.moduleIndex ?? null,
+      })),
+    })
   }
 
   async addAttachment(

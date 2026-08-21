@@ -51,4 +51,28 @@ export interface CourseCatalogRepository {
     input: Omit<CreateAttachment, 'courseId' | 'courseName'>,
   ): Promise<Attachment>
   deleteAttachment(course: Course, attachmentId: string): Promise<boolean>
+  editCourse(
+    course: Course,
+    input: {
+      scalars: Pick<
+        Course,
+        | 'name'
+        | 'durationMinutes'
+        | 'type'
+        | 'liveCallDurationMinutes'
+        | 'certificateOnCompletion'
+        | 'scheduledAt'
+        | 'accessType'
+        | 'priceKobo'
+      >
+      modules: Array<{ id: string | null; title: string; content: string }>
+      attachments: Array<{
+        id: string | null
+        attachmentPath: string | null
+        fileName: string | null
+        moduleId: string | null
+        moduleIndex: number | null
+      }>
+    },
+  ): Promise<CourseAggregate>
 }
