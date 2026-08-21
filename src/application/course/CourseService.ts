@@ -99,6 +99,29 @@ export class CourseService {
     return module
   }
 
+  async updateModule(
+    author: Author,
+    courseId: string,
+    moduleId: string,
+    input: { title: string; content: string },
+  ) {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const module = await this.dependencies.courses.updateModule(aggregate.course, moduleId, {
+      title: input.title.trim(),
+      content: input.content.trim(),
+    })
+    if (!module) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
+    await this.dependencies.participation.resetCourseCompletion(courseId)
+    return module
+  }
+
+  async deleteModule(author: Author, courseId: string, moduleId: string) {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const deleted = await this.dependencies.courses.deleteModule(aggregate.course, moduleId)
+    if (!deleted) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
+    await this.dependencies.participation.resetCourseCompletion(courseId)
+  }
+
   async update(
     author: Author,
     courseId: string,
@@ -126,12 +149,25 @@ export class CourseService {
   async addAttachment(
     author: Author,
     courseId: string,
-    input: { attachmentPath: string; fileName?: string | null },
+    input: { attachmentPath: string; fileName?: string | null; moduleId?: string | null },
   ) {
     const aggregate = await this.ownedCourse(author, courseId)
     this.assertAttachmentLimit(aggregate.attachments.length + 1)
+    if (input.moduleId && !aggregate.modules.some((module) => module.id === input.moduleId))
+      throw new ApplicationError(
+        'A module attachment must reference a module in this course',
+        'INVALID_ATTACHMENT_MODULE',
+        400,
+      )
     await this.assertAttachments(author.id, [input.attachmentPath])
     return this.dependencies.courses.addAttachment(aggregate.course, input)
+  }
+
+  async deleteAttachment(author: Author, courseId: string, attachmentId: string) {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const deleted = await this.dependencies.courses.deleteAttachment(aggregate.course, attachmentId)
+    if (!deleted)
+      throw new ApplicationError('Course attachment not found', 'ATTACHMENT_NOT_FOUND', 404)
   }
 
   async getAvailable(courseId: string): Promise<CourseAggregate> {

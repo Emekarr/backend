@@ -194,6 +194,41 @@ export const createCourseRouter = (dependencies: {
     }),
   )
 
+  router.patch(
+    '/author/courses/:courseId/modules/:moduleId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.courseModuleParams),
+    validateBody(schemas.module),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const moduleId = request.params.moduleId as string
+      setActivity(request, { action: 'course.module.update', metadata: { courseId, moduleId } })
+      response.json({
+        module: await dependencies.courses.updateModule(
+          authenticatedAuthor(request),
+          courseId,
+          moduleId,
+          request.body as { title: string; content: string },
+        ),
+      })
+    }),
+  )
+
+  router.delete(
+    '/author/courses/:courseId/modules/:moduleId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.courseModuleParams),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const moduleId = request.params.moduleId as string
+      setActivity(request, { action: 'course.module.delete', metadata: { courseId, moduleId } })
+      await dependencies.courses.deleteModule(authenticatedAuthor(request), courseId, moduleId)
+      response.status(204).end()
+    }),
+  )
+
   router.post(
     '/author/courses/:courseId/attachments',
     authenticateAuthor(dependencies.authorAuth),
@@ -207,9 +242,34 @@ export const createCourseRouter = (dependencies: {
         attachment: await dependencies.courses.addAttachment(
           authenticatedAuthor(request),
           courseId,
-          request.body as { attachmentPath: string; fileName?: string | null },
+          request.body as {
+            attachmentPath: string
+            fileName?: string | null
+            moduleId?: string | null
+          },
         ),
       })
+    }),
+  )
+
+  router.delete(
+    '/author/courses/:courseId/attachments/:attachmentId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.courseAttachmentParams),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      const attachmentId = request.params.attachmentId as string
+      setActivity(request, {
+        action: 'course.attachment.delete',
+        metadata: { courseId, attachmentId },
+      })
+      await dependencies.courses.deleteAttachment(
+        authenticatedAuthor(request),
+        courseId,
+        attachmentId,
+      )
+      response.status(204).end()
     }),
   )
 

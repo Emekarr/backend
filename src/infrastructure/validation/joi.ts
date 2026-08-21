@@ -304,6 +304,7 @@ export const schemas = {
       )
       .required(),
     fileName: plainText(200).allow(null).optional(),
+    moduleId: id.allow(null).optional(),
   }).unknown(false),
   upload: Joi.object({
     fileName: plainText(200).required(),

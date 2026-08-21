@@ -40,8 +40,15 @@ export interface CourseCatalogRepository {
     course: Course,
     input: Omit<CreateCourseModule, 'courseId' | 'order'>,
   ): Promise<CourseModule>
+  updateModule(
+    course: Course,
+    moduleId: string,
+    input: { title: string; content: string },
+  ): Promise<CourseModule | null>
+  deleteModule(course: Course, moduleId: string): Promise<boolean>
   addAttachment(
     course: Course,
     input: Omit<CreateAttachment, 'courseId' | 'courseName'>,
   ): Promise<Attachment>
+  deleteAttachment(course: Course, attachmentId: string): Promise<boolean>
 }

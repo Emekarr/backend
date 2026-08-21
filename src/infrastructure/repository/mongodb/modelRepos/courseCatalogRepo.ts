@@ -128,6 +128,28 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
     return clean((await this.modules.create({ ...input, courseId: course.id, order })).toObject())
   }
 
+  async updateModule(
+    course: Course,
+    moduleId: string,
+    input: { title: string; content: string },
+  ): Promise<CourseModule | null> {
+    const document = await this.modules
+      .findOneAndUpdate(
+        { id: moduleId, courseId: course.id },
+        { $set: input },
+        { new: true, runValidators: true },
+      )
+      .lean()
+      .exec()
+    return document ? clean<CourseModule>(document) : null
+  }
+
+  async deleteModule(course: Course, moduleId: string): Promise<boolean> {
+    const result = await this.modules.deleteOne({ id: moduleId, courseId: course.id }).exec()
+    await this.attachments.deleteMany({ courseId: course.id, moduleId }).exec()
+    return (result.deletedCount ?? 0) > 0
+  }
+
   async addAttachment(
     course: Course,
     input: Parameters<CourseCatalogRepository['addAttachment']>[1],
@@ -138,10 +160,17 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
           ...input,
           courseId: course.id,
           courseName: course.name,
-          moduleId: null,
+          moduleId: input.moduleId ?? null,
         })
       ).toObject(),
     )
+  }
+
+  async deleteAttachment(course: Course, attachmentId: string): Promise<boolean> {
+    const result = await this.attachments
+      .deleteOne({ id: attachmentId, courseId: course.id })
+      .exec()
+    return (result.deletedCount ?? 0) > 0
   }
 }
 
