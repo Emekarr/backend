@@ -259,7 +259,7 @@ export class LiveClassService {
         'VALIDATION_ERROR',
         400,
       )
-    if (kind === 'reaction' && !['👍', '👏', '❤️', '🎉', '😂', '🤔'].includes(value))
+    if (kind === 'reaction' && !['👍', '👏', '❤️', '🎉', '😂', '🤔', '🔥', '🙌'].includes(value))
       throw new ApplicationError('Unsupported reaction', 'VALIDATION_ERROR', 400)
     return this.dependencies.live.createMessage({
       sessionId,
