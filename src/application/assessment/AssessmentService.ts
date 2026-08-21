@@ -18,7 +18,7 @@ import type { CertificateService } from '../certificate/CertificateService'
 export interface CreateAssessmentInput {
   title: string
   description: string
-  courseId?: string | null
+  courseId: string
   durationMinutes: number
   opensAt: Date
   closesAt: Date
@@ -77,22 +77,22 @@ export class AssessmentService {
         'ASSESSMENT_ATTACHMENT_LIMIT',
         400,
       )
-    if (input.courseId) {
-      const course = await this.dependencies.courses.findById(input.courseId)
-      if (!course) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
-      if (course.course.createdByAuthorId !== author.id)
-        throw new ApplicationError(
-          'Only the course author can link an assessment',
-          'FORBIDDEN',
-          403,
-        )
-      if (await this.dependencies.assessments.findByCourseId(input.courseId))
-        throw new ApplicationError(
-          'This course already has a final assessment',
-          'COURSE_ASSESSMENT_EXISTS',
-          409,
-        )
-    }
+    if (!input.courseId)
+      throw new ApplicationError(
+        'An assessment must be linked to a course',
+        'COURSE_REQUIRED',
+        400,
+      )
+    const course = await this.dependencies.courses.findById(input.courseId)
+    if (!course) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (course.course.createdByAuthorId !== author.id)
+      throw new ApplicationError('Only the course author can link an assessment', 'FORBIDDEN', 403)
+    if (await this.dependencies.assessments.findByCourseId(input.courseId))
+      throw new ApplicationError(
+        'This course already has a final assessment',
+        'COURSE_ASSESSMENT_EXISTS',
+        409,
+      )
 
     for (const question of input.questions) {
       const media = question.mediaUrl?.trim()
@@ -158,7 +158,7 @@ export class AssessmentService {
       title: input.title.trim(),
       description: input.description.trim(),
       authorId: author.id,
-      courseId: input.courseId ?? null,
+      courseId: input.courseId,
       durationMinutes: input.durationMinutes,
       opensAt: input.opensAt,
       closesAt: input.closesAt,

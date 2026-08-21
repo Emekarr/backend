@@ -343,7 +343,7 @@ export const schemas = {
   assessment: Joi.object({
     title: plainText(200).required(),
     description: plainText(5000).required(),
-    courseId: id.allow(null).optional(),
+    courseId: id.required(),
     durationMinutes: Joi.number().integer().min(1).max(1440).required(),
     opensAt: Joi.string().isoDate().required(),
     closesAt: Joi.string().isoDate().required(),

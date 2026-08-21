@@ -34,7 +34,7 @@ export const AssessmentSchema = new Schema<Assessment>(
     title: { type: String, required: true, trim: true, maxlength: 200 },
     description: { type: String, required: true, trim: true, maxlength: 5000 },
     authorId: { type: String, required: true, index: true },
-    courseId: { type: String, default: null, index: true },
+    courseId: { type: String, required: true, index: true },
     durationMinutes: { type: Number, required: true, min: 1, max: 1440 },
     opensAt: { type: Date, required: true, index: true },
     closesAt: { type: Date, required: true, index: true },

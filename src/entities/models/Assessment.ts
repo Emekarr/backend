@@ -25,7 +25,7 @@ export interface Assessment extends BaseEntity {
   title: string
   description: string
   authorId: string
-  courseId: string | null
+  courseId: string
   durationMinutes: number
   opensAt: Date
   closesAt: Date
