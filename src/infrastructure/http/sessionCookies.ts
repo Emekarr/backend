@@ -5,10 +5,10 @@ export type FrontendSession = 'admin' | 'author' | 'student'
 type TokenKind = 'access' | 'refresh' | 'challenge' | 'setup'
 
 const cookieName = (frontend: FrontendSession, kind: TokenKind) => `danvic_${frontend}_${kind}`
-const cookieOptions = (maxAgeSeconds: number, httpOnly = true) => ({
-  httpOnly,
+const cookieOptions = (maxAgeSeconds: number) => ({
+  httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'none' as const,
+  sameSite: process.env.NODE_ENV === 'production' ? ('none' as const) : ('lax' as const),
   partitioned: process.env.NODE_ENV === 'production',
   path: '/',
   maxAge: maxAgeSeconds * 1000,
@@ -23,6 +23,12 @@ const cookies = (request: Request): Record<string, string> =>
       .map(([name, value]) => [name!, decodeURIComponent(value!)]),
   )
 
+const sessionCookie = (
+  request: Request,
+  frontend: FrontendSession,
+  kind: TokenKind,
+): string | undefined => cookies(request)[cookieName(frontend, kind)]
+
 export const sessionToken = (
   request: Request,
   frontend: FrontendSession,
@@ -30,10 +36,37 @@ export const sessionToken = (
 ): string => {
   const [scheme, authorization] = request.headers.authorization?.split(' ') ?? []
   if (scheme?.toLowerCase() === 'bearer' && authorization) return authorization
-  const token = cookies(request)[cookieName(frontend, kind)]
+  const token = sessionCookie(request, frontend, kind)
   if (!token)
     throw new ApplicationError('Authentication is required', 'AUTHENTICATION_REQUIRED', 401)
   return token
+}
+
+export const authenticateSession = async <User>(
+  request: Request,
+  response: Response,
+  frontend: FrontendSession,
+  auth: {
+    authenticate(accessToken: string): Promise<User>
+    renewAccess(refreshToken: string): Promise<string>
+  },
+): Promise<User> => {
+  try {
+    return await auth.authenticate(sessionToken(request, frontend))
+  } catch (error) {
+    if (
+      !(error instanceof ApplicationError) ||
+      (error.code !== 'INVALID_TOKEN' && error.code !== 'AUTHENTICATION_REQUIRED')
+    )
+      throw error
+
+    const refreshToken = sessionCookie(request, frontend, 'refresh')
+    if (!refreshToken) throw error
+
+    const accessToken = await auth.renewAccess(refreshToken)
+    response.cookie(cookieName(frontend, 'access'), accessToken, cookieOptions(2 * 60 * 60))
+    return auth.authenticate(accessToken)
+  }
 }
 
 export const setSession = (
@@ -42,12 +75,20 @@ export const setSession = (
   tokens: { accessToken: string; refreshToken: string },
 ): void => {
   response.cookie(cookieName(frontend, 'access'), tokens.accessToken, cookieOptions(2 * 60 * 60))
-  response.cookie(cookieName(frontend, 'refresh'), tokens.refreshToken, cookieOptions(30 * 24 * 60 * 60))
+  response.cookie(
+    cookieName(frontend, 'refresh'),
+    tokens.refreshToken,
+    cookieOptions(30 * 24 * 60 * 60),
+  )
   response.clearCookie(cookieName(frontend, 'challenge'), cookieOptions(0))
   response.clearCookie(cookieName(frontend, 'setup'), cookieOptions(0))
 }
 
-export const setChallenge = (response: Response, frontend: FrontendSession, token: string): void => {
+export const setChallenge = (
+  response: Response,
+  frontend: FrontendSession,
+  token: string,
+): void => {
   response.cookie(cookieName(frontend, 'challenge'), token, cookieOptions(5 * 60))
   response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0))
   response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0))

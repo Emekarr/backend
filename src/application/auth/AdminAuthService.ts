@@ -277,6 +277,23 @@ export class AdminAuthService {
     return admin
   }
 
+  async renewAccess(refreshToken: string): Promise<string> {
+    const record = await this.dependencies.refreshTokens.find(
+      this.dependencies.secureTokens.hash(refreshToken),
+    )
+    if (!record)
+      throw new ApplicationError(
+        'Refresh token is invalid or expired',
+        'INVALID_REFRESH_TOKEN',
+        401,
+      )
+
+    const admin = await this.getRefreshAdmin(record)
+    if (admin.isSuperAdmin && !admin.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
+    return this.issueToken(admin, 'access')
+  }
+
   async refresh(refreshToken: string): Promise<SessionTokens> {
     const nextRefreshToken = this.dependencies.secureTokens.token(32)
     const result = await this.dependencies.refreshTokens.rotate(

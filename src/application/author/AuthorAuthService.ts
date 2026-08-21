@@ -147,6 +147,19 @@ export class AuthorAuthService {
     return this.getTokenAuthor(this.dependencies.tokens.verify(token, 'access'))
   }
 
+  async renewAccess(refreshToken: string): Promise<string> {
+    const record = await this.dependencies.refreshTokens.find(
+      this.dependencies.secureTokens.hash(refreshToken),
+    )
+    if (!record)
+      throw new ApplicationError(
+        'Refresh token is invalid or expired',
+        'INVALID_REFRESH_TOKEN',
+        401,
+      )
+    return this.issue(await this.getRefreshAuthor(record), 'access')
+  }
+
   async updateProfile(authorId: string, input: AuthorProfileUpdate): Promise<Author> {
     const author = await this.dependencies.authors.updateById(authorId, input)
     if (!author) throw new ApplicationError('Author account not found', 'AUTHOR_NOT_FOUND', 404)

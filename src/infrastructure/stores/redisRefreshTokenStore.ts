@@ -54,6 +54,11 @@ export class RedisRefreshTokenStore implements RefreshTokenStore {
     })
   }
 
+  async find(tokenHash: string): Promise<RefreshTokenRecord | undefined> {
+    const value = await this.connection.client.get(this.tokenKey(tokenHash))
+    return value ? this.parseRecord(value) : undefined
+  }
+
   async rotate(tokenHash: string, nextTokenHash: string): Promise<RefreshTokenRotation> {
     const result = await this.connection.client.eval(ROTATE_SCRIPT, {
       keys: [this.tokenKey(tokenHash), this.usedKey(tokenHash), this.tokenKey(nextTokenHash)],

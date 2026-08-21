@@ -9,6 +9,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "start": "node dist/init.js",
+    "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "validate": "yarn format:check && yarn typecheck"
   },

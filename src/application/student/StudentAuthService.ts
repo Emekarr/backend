@@ -236,6 +236,22 @@ export class StudentAuthService {
     return student
   }
 
+  async renewAccess(refreshToken: string): Promise<string> {
+    const record = await this.dependencies.refreshTokens.find(
+      this.dependencies.secureTokens.hash(refreshToken),
+    )
+    if (!record)
+      throw new ApplicationError(
+        'Refresh token is invalid or expired',
+        'INVALID_REFRESH_TOKEN',
+        401,
+      )
+    const student = await this.getRefreshStudent(record)
+    if (!student.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
+    return this.issue(student, 'access')
+  }
+
   async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     const nextRefreshToken = this.dependencies.secureTokens.token(32)
     const result = await this.dependencies.refreshTokens.rotate(

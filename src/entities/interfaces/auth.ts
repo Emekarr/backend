@@ -70,6 +70,7 @@ export type RefreshTokenRotation =
 
 export interface RefreshTokenStore {
   create(tokenHash: string, record: RefreshTokenRecord, ttlSeconds: number): Promise<void>
+  find(tokenHash: string): Promise<RefreshTokenRecord | undefined>
   rotate(tokenHash: string, nextTokenHash: string): Promise<RefreshTokenRotation>
   revoke(tokenHash: string): Promise<void>
 }

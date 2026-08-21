@@ -8,7 +8,14 @@ import type { RateLimiter } from '../../../entities/interfaces/auth'
 import type { Admin } from '../../../entities/models/Admin'
 import type { Permission } from '../../../entities/models/Permissions'
 import { setActivity } from '../activityAudit'
-import { clearSession, sessionToken, setChallenge, setSession, setSetup } from '../sessionCookies'
+import {
+  authenticateSession,
+  clearSession,
+  sessionToken,
+  setChallenge,
+  setSession,
+  setSetup,
+} from '../sessionCookies'
 import { schemas, validateBody, validateParams, validateQuery } from '../../validation/joi'
 
 export interface AdminRouteDependencies {
@@ -105,7 +112,9 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
     validateBody(schemas.empty),
     rateLimit(dependencies.rateLimiter, 'admin-2fa-setup', 10, 300),
     asyncRoute(async (request, response) => {
-      response.status(200).json(await dependencies.auth.beginTwoFactorSetup(bearerToken(request, 'setup')))
+      response
+        .status(200)
+        .json(await dependencies.auth.beginTwoFactorSetup(bearerToken(request, 'setup')))
     }),
   )
 
@@ -358,8 +367,8 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
 }
 
 const authenticate = (auth: AdminAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const admin = await auth.authenticate(bearerToken(request))
+  asyncRoute(async (request, response, next) => {
+    const admin = await authenticateSession(request, response, 'admin', auth)
     Object.assign(request, { admin })
     setActivity(request, { actorType: 'admin', actorId: admin.id, actorEmail: admin.email })
     next()
@@ -391,7 +400,9 @@ const asyncRoute =
     void handler(request, response, next).catch(next)
   }
 
-const bearerToken = (request: Request, kind: 'access' | 'refresh' | 'challenge' | 'setup' = 'access') =>
-  sessionToken(request, 'admin', kind)
+const bearerToken = (
+  request: Request,
+  kind: 'access' | 'refresh' | 'challenge' | 'setup' = 'access',
+) => sessionToken(request, 'admin', kind)
 
 const authenticated = (request: Request): AuthenticatedRequest => request as AuthenticatedRequest

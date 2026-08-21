@@ -15,7 +15,14 @@ import type { Author } from '../../../entities/models/Author'
 import type { Student } from '../../../entities/models/Student'
 import { ApplicationError } from '../../../entities/errors/applicationError'
 import { setActivity } from '../activityAudit'
-import { clearSession, sessionToken, setChallenge, setSession, setSetup } from '../sessionCookies'
+import {
+  authenticateSession,
+  clearSession,
+  sessionToken,
+  setChallenge,
+  setSession,
+  setSetup,
+} from '../sessionCookies'
 import { schemas, validateBody, validateParams, validateQuery } from '../../validation/joi'
 
 type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>
@@ -471,24 +478,24 @@ export const createStudentRouter = (dependencies: {
 }
 
 export const authenticateStudent = (auth: StudentAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const student = await auth.authenticate(bearer(request))
+  asyncRoute(async (request, response, next) => {
+    const student = await authenticateSession(request, response, 'student', auth)
     Object.assign(request, { student })
     setActivity(request, { actorType: 'student', actorId: student.id, actorEmail: student.email })
     next()
   })
 
 const authenticateAdmin = (auth: AdminAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const admin = await auth.authenticate(sessionToken(request, 'admin'))
+  asyncRoute(async (request, response, next) => {
+    const admin = await authenticateSession(request, response, 'admin', auth)
     Object.assign(request, { admin })
     setActivity(request, { actorType: 'admin', actorId: admin.id, actorEmail: admin.email })
     next()
   })
 
 const authenticateAuthor = (auth: AuthorAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const author = await auth.authenticate(sessionToken(request, 'author'))
+  asyncRoute(async (request, response, next) => {
+    const author = await authenticateSession(request, response, 'author', auth)
     Object.assign(request, { author })
     setActivity(request, { actorType: 'author', actorId: author.id, actorEmail: author.email })
     next()

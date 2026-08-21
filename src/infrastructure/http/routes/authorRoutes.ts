@@ -10,7 +10,13 @@ import type { RateLimiter } from '../../../entities/interfaces/auth'
 import type { Admin } from '../../../entities/models/Admin'
 import type { Author } from '../../../entities/models/Author'
 import { setActivity } from '../activityAudit'
-import { clearSession, sessionToken, setChallenge, setSession } from '../sessionCookies'
+import {
+  authenticateSession,
+  clearSession,
+  sessionToken,
+  setChallenge,
+  setSession,
+} from '../sessionCookies'
 import { schemas, validateBody, validateQuery } from '../../validation/joi'
 
 type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>
@@ -217,16 +223,16 @@ export const createAuthorRouter = (dependencies: {
 }
 
 export const authenticateAuthor = (auth: AuthorAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const author = await auth.authenticate(bearer(request))
+  asyncRoute(async (request, response, next) => {
+    const author = await authenticateSession(request, response, 'author', auth)
     Object.assign(request, { author })
     setActivity(request, { actorType: 'author', actorId: author.id, actorEmail: author.email })
     next()
   })
 
 const authenticateAdmin = (auth: AdminAuthService) =>
-  asyncRoute(async (request, _response, next) => {
-    const admin = await auth.authenticate(sessionToken(request, 'admin'))
+  asyncRoute(async (request, response, next) => {
+    const admin = await authenticateSession(request, response, 'admin', auth)
     Object.assign(request, { admin })
     setActivity(request, { actorType: 'admin', actorId: admin.id, actorEmail: admin.email })
     next()
