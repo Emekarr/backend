@@ -14,6 +14,90 @@ const plainText = (maximum: number) =>
     })
     .messages({ 'string.plainText': '{{#label}} must contain plain text only' })
 
+const MAX_LEGACY_MODULE_CONTENT_LENGTH = 100_000
+const MAX_RICH_MODULE_CONTENT_LENGTH = 2_000_000
+const MAX_RICH_MODULE_NODES = 50_000
+const MAX_RICH_MODULE_DEPTH = 32
+
+const tiptapNodeTypes = new Set([
+  'doc',
+  'paragraph',
+  'text',
+  'heading',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'blockquote',
+  'codeBlock',
+  'hardBreak',
+  'horizontalRule',
+  'image',
+  'table',
+  'tableRow',
+  'tableHeader',
+  'tableCell',
+])
+const tiptapMarkTypes = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link'])
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+function validTiptapDocument(value: unknown): boolean {
+  if (!isObject(value) || value.type !== 'doc' || !Array.isArray(value.content)) return false
+  let nodeCount = 0
+  let meaningful = false
+  const visit = (node: unknown, depth: number): boolean => {
+    if (!isObject(node) || depth > MAX_RICH_MODULE_DEPTH || nodeCount++ > MAX_RICH_MODULE_NODES)
+      return false
+    if (typeof node.type !== 'string' || !tiptapNodeTypes.has(node.type)) return false
+    if (node.type === 'text') {
+      if (typeof node.text !== 'string' || node.text.length > MAX_RICH_MODULE_CONTENT_LENGTH)
+        return false
+      meaningful ||= node.text.trim().length > 0
+    } else if ('text' in node) {
+      return false
+    }
+    if (node.type === 'image') meaningful = true
+    if (node.marks !== undefined) {
+      if (!Array.isArray(node.marks)) return false
+      for (const mark of node.marks) {
+        if (!isObject(mark) || typeof mark.type !== 'string' || !tiptapMarkTypes.has(mark.type))
+          return false
+      }
+    }
+    if (node.content !== undefined) {
+      if (!Array.isArray(node.content)) return false
+      for (const child of node.content) if (!visit(child, depth + 1)) return false
+    }
+    return true
+  }
+  return visit(value, 0) && meaningful
+}
+
+const moduleContent = Joi.string()
+  .trim()
+  .min(1)
+  .max(MAX_RICH_MODULE_CONTENT_LENGTH)
+  .custom((value: string, helpers) => {
+    if (value.startsWith('{"type":"doc"')) {
+      try {
+        if (validTiptapDocument(JSON.parse(value))) return value
+      } catch {
+        // The validation error below intentionally covers malformed editor documents.
+      }
+      return helpers.error('string.moduleContent')
+    }
+    if (
+      value.length > MAX_LEGACY_MODULE_CONTENT_LENGTH ||
+      /[<>\u0000-\u0008\u000B\u000C\u000E-\u001F]/u.test(value)
+    )
+      return helpers.error('string.moduleContent')
+    return value
+  })
+  .messages({
+    'string.moduleContent': '{{#label}} must be valid course-module content',
+  })
+
 const MAX_COURSE_UPLOAD_BYTES = 1024 * 1024 * 1024
 
 const email = Joi.string()
@@ -143,7 +227,7 @@ export const schemas = {
       .items(
         Joi.object({
           title: plainText(200).required(),
-          content: plainText(100000).required(),
+          content: moduleContent.required(),
         }).unknown(false),
       )
       .max(100)
@@ -198,7 +282,7 @@ export const schemas = {
   }).unknown(false),
   module: Joi.object({
     title: plainText(200).required(),
-    content: plainText(100000).required(),
+    content: moduleContent.required(),
   }).unknown(false),
   attachment: Joi.object({
     attachmentPath: Joi.string()
