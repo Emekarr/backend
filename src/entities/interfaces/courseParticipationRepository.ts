@@ -30,6 +30,7 @@ export interface CourseParticipationRepository {
   }): Promise<ModuleProgress>
   markEnrollmentCompleted(enrollmentId: string, completedAt: Date): Promise<void>
   resetCourseCompletion(courseId: string): Promise<void>
+  resetCourseProgress(courseId: string): Promise<void>
   upsertAuthorRating(input: {
     authorId: string
     courseId: string

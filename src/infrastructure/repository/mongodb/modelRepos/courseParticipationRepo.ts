@@ -98,6 +98,46 @@ export class CourseParticipationRepo implements CourseParticipationRepository {
     await this.enrollments.updateMany({ courseId }, { $set: { completedAt: null } })
   }
 
+  async resetCourseProgress(courseId: string): Promise<void> {
+    const [enrollments, progress] = await Promise.all([
+      this.enrollments.find({ courseId }).select('id completedAt').lean().exec(),
+      this.progress.find({ courseId }).select('enrollmentId moduleId completedAt').lean().exec(),
+    ])
+    if (!enrollments.length) return
+
+    const completedByEnrollment = new Map<string, string[]>()
+    for (const item of progress) {
+      const completed = completedByEnrollment.get(item.enrollmentId) ?? []
+      completed.push(item.moduleId)
+      completedByEnrollment.set(item.enrollmentId, completed)
+    }
+    const resetAt = new Date()
+    await this.enrollments.bulkWrite(
+      enrollments.map((enrollment) => ({
+        updateOne: {
+          filter: { id: enrollment.id },
+          update: {
+            $set: { completedAt: null },
+            $push: {
+              progressResetHistory: {
+                $each: [
+                  {
+                    resetAt,
+                    reason: 'course_modules_changed' as const,
+                    completedModuleIds: completedByEnrollment.get(enrollment.id) ?? [],
+                    completedAt: enrollment.completedAt ?? null,
+                  },
+                ],
+                $slice: -20,
+              },
+            },
+          },
+        },
+      })),
+    )
+    await this.progress.deleteMany({ courseId }).exec()
+  }
+
   async upsertAuthorRating(input: {
     authorId: string
     courseId: string
@@ -199,5 +239,6 @@ const cleanEnrollment = (value: unknown): CourseEnrollment => {
     ...enrollment,
     source: enrollment.source ?? 'invitation',
     paymentReference: enrollment.paymentReference ?? null,
+    progressResetHistory: enrollment.progressResetHistory ?? [],
   }
 }

@@ -103,7 +103,7 @@ export class CourseService {
     await this.dependencies.notifications.publish({
       title: 'Course published',
       body: `${aggregate.course.name} was published by ${author.firstName} ${author.lastName}.`,
-      link: `/courses/${aggregate.course.id}`,
+      link: `/courses/detail?id=${encodeURIComponent(aggregate.course.id)}`,
     })
     return aggregate
   }
@@ -114,7 +114,7 @@ export class CourseService {
       title: input.title.trim(),
       content: input.content.trim(),
     })
-    await this.dependencies.participation.resetCourseCompletion(courseId)
+    await this.dependencies.participation.resetCourseProgress(courseId)
     return module
   }
 
@@ -125,12 +125,17 @@ export class CourseService {
     input: { title: string; content: string },
   ) {
     const aggregate = await this.ownedCourse(author, courseId)
+    const existing = aggregate.modules.find((item) => item.id === moduleId)
     const module = await this.dependencies.courses.updateModule(aggregate.course, moduleId, {
       title: input.title.trim(),
       content: input.content.trim(),
     })
     if (!module) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
-    await this.dependencies.participation.resetCourseCompletion(courseId)
+    if (
+      existing &&
+      (existing.title !== input.title.trim() || existing.content !== input.content.trim())
+    )
+      await this.dependencies.participation.resetCourseProgress(courseId)
     return module
   }
 
@@ -138,7 +143,7 @@ export class CourseService {
     const aggregate = await this.ownedCourse(author, courseId)
     const deleted = await this.dependencies.courses.deleteModule(aggregate.course, moduleId)
     if (!deleted) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
-    await this.dependencies.participation.resetCourseCompletion(courseId)
+    await this.dependencies.participation.resetCourseProgress(courseId)
   }
 
   async update(
@@ -167,6 +172,7 @@ export class CourseService {
 
   async edit(author: Author, courseId: string, input: EditCourseInput): Promise<CourseAggregate> {
     const aggregate = await this.ownedCourse(author, courseId)
+    const resetProgress = courseModulesChanged(aggregate.modules, input.modules)
     this.assertLiveClassDuration(input.type, input.liveCallDurationMinutes)
     const priceKobo = this.priceInKobo(input.accessType, input.priceNaira)
     this.assertAttachmentLimit(input.attachments.length)
@@ -191,7 +197,7 @@ export class CourseService {
           400,
         )
     }
-    return this.dependencies.courses.editCourse(aggregate.course, {
+    const updated = await this.dependencies.courses.editCourse(aggregate.course, {
       scalars: {
         name: input.name.trim(),
         durationMinutes: input.durationMinutes,
@@ -215,6 +221,8 @@ export class CourseService {
         moduleIndex: attachment.moduleIndex ?? null,
       })),
     })
+    if (resetProgress) await this.dependencies.participation.resetCourseProgress(courseId)
+    return updated
   }
 
   async addAttachment(
@@ -485,3 +493,15 @@ export class CourseService {
     }
   }
 }
+
+export const courseModulesChanged = (
+  current: Array<{ id: string; title: string; content: string }>,
+  next: Array<{ id?: string | null; title: string; content: string }>,
+): boolean =>
+  current.length !== next.length ||
+  current.some(
+    (module, index) =>
+      next[index]?.id !== module.id ||
+      next[index]?.title.trim() !== module.title ||
+      next[index]?.content.trim() !== module.content,
+  )

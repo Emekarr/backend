@@ -387,7 +387,7 @@ export class LiveClassService {
         this.dependencies.config.JWT_SECRET,
         { expiresIn: '8h' },
       )
-      const recorderPageUrl = `${this.dependencies.config.STUDENT_APP_BASE_URL}/live-recorder/${session.id}?token=${encodeURIComponent(recorderToken)}`
+      const recorderPageUrl = `${this.dependencies.config.STUDENT_APP_BASE_URL}/live-recorder?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(recorderToken)}`
       const started = await this.dependencies.provider.startRecording({
         resourceId,
         channelName: session.channelName,

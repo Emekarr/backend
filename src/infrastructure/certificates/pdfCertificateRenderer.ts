@@ -8,7 +8,7 @@ export class PdfCertificateRenderer implements CertificateDocumentRenderer {
   constructor(private readonly config: EnvironmentConfig) {}
 
   verificationUrl(certificateNumber: string): string {
-    return `${this.config.STUDENT_APP_BASE_URL}/certificates/${encodeURIComponent(certificateNumber)}`
+    return `${this.config.STUDENT_APP_BASE_URL}/certificate?number=${encodeURIComponent(certificateNumber)}`
   }
 
   async render(certificate: Certificate): Promise<Buffer> {

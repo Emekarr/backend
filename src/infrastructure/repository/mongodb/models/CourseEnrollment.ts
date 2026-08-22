@@ -17,6 +17,24 @@ export const CourseEnrollmentSchema = new Schema<CourseEnrollment>(
     paymentReference: { type: String, default: null },
     enrolledAt: { type: Date, required: true },
     completedAt: { type: Date, default: null },
+    progressResetHistory: {
+      type: [
+        new Schema(
+          {
+            resetAt: { type: Date, required: true },
+            reason: {
+              type: String,
+              enum: ['course_modules_changed'],
+              required: true,
+            },
+            completedModuleIds: { type: [String], required: true, default: [] },
+            completedAt: { type: Date, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
   },
   baseSchemaOptions,
 )
