@@ -52,10 +52,10 @@ export class LiveClassService {
     input: { courseId: string; scheduledAt?: Date | null; durationMinutes: number },
   ) {
     const course = await this.requireOwnedCourse(author.id, input.courseId)
-    if (course.course.type !== 'live')
+    if (!input.scheduledAt || Number.isNaN(input.scheduledAt.getTime()))
       throw new ApplicationError(
-        'Live classes can only be attached to live courses',
-        'LIVE_COURSE_REQUIRED',
+        'A start date and time is required for every live class',
+        'VALIDATION_ERROR',
         400,
       )
     if (
@@ -75,7 +75,7 @@ export class LiveClassService {
       channelName: `class-${input.courseId}-${generateID()}`.slice(0, 63),
       durationMinutes: input.durationMinutes,
       status: 'scheduled',
-      scheduledAt: input.scheduledAt ?? null,
+      scheduledAt: input.scheduledAt,
       startedAt: null,
       endedAt: null,
       expiresAt: null,

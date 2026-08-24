@@ -438,6 +438,24 @@ export const createStudentRouter = (dependencies: {
   )
 
   router.post(
+    '/student/courses/:courseId/complete',
+    authenticateStudent(dependencies.studentAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    validateBody(schemas.empty),
+    asyncRoute(async (request, response) => {
+      const courseId = request.params.courseId as string
+      setActivity(request, { action: 'course.complete', metadata: { courseId } })
+      response.json(
+        await dependencies.participation.completeCourse(
+          (request as StudentRequest).student,
+          courseId,
+        ),
+      )
+    }),
+  )
+
+  router.post(
     '/student/courses/:courseId/author-rating',
     authenticateStudent(dependencies.studentAuth),
     validateQuery(),

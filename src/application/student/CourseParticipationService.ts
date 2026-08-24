@@ -149,6 +149,39 @@ export class CourseParticipationService {
     return { progress: record, courseCompleted }
   }
 
+  async completeCourse(student: Student, courseId: string) {
+    const aggregate = await this.availableCourse(courseId)
+    const enrollment = await this.dependencies.participation.findEnrollment(student.id, courseId)
+    if (!enrollment)
+      throw new ApplicationError(
+        'You must enroll before ending this course',
+        'ENROLLMENT_REQUIRED',
+        403,
+      )
+    if (enrollment.completedAt) return this.courseView(student, courseId, enrollment)
+    if (aggregate.modules.length > 0) {
+      const progress = await this.dependencies.participation.findProgress(student.id, courseId)
+      const completed = new Set(progress?.completedModules.map((item) => item.moduleId) ?? [])
+      if (aggregate.modules.some((module) => !completed.has(module.id)))
+        throw new ApplicationError(
+          'Complete every module before ending the course',
+          'MODULE_ORDER_REQUIRED',
+          409,
+        )
+    }
+    if (await this.dependencies.assessments.findByCourseId(courseId))
+      throw new ApplicationError(
+        'This course ends with its final assessment; pass the assessment to complete the course',
+        'ASSESSMENT_REQUIRED',
+        409,
+      )
+    const completedAt = new Date()
+    await this.dependencies.participation.markEnrollmentCompleted(enrollment.id, completedAt)
+    if (aggregate.course.certificateOnCompletion)
+      await this.dependencies.certificates.issue(student, aggregate.course, completedAt)
+    return this.courseView(student, courseId)
+  }
+
   async listMine(student: Student) {
     const records = await this.dependencies.participation.listForStudent(student.id)
     return Promise.all(
