@@ -164,10 +164,15 @@ export class LiveClassService {
     if (!whiteboardRoomUuid)
       whiteboardRoomUuid = await this.dependencies.provider.createWhiteboardRoom()
     const startedAt = new Date()
+    const windowEnd =
+      settled.scheduledAt ?? new Date(startedAt.getTime() + settled.durationMinutes * 60 * 1000)
+    const expiresAt = new Date(windowEnd.getTime() + settled.durationMinutes * 60 * 1000)
+    if (expiresAt.getTime() <= startedAt.getTime())
+      throw conflict('The scheduled time for this class has already passed')
     return this.dependencies.live.updateSession(settled.id, {
       status: 'live',
       startedAt,
-      expiresAt: new Date(startedAt.getTime() + settled.durationMinutes * 60 * 1000),
+      expiresAt,
       whiteboardRoomUuid,
     })
   }
