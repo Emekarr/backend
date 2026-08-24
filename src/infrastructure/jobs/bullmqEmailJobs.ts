@@ -22,6 +22,7 @@ import { passwordResetEmail } from '../email/templates/passwordReset'
 import { certificateEmail } from '../email/templates/certificate'
 import { liveReminderEmail } from '../email/templates/liveReminder'
 import { studentLiveReminderEmail } from '../email/templates/studentLiveReminder'
+import { liveClassScheduledEmail } from '../email/templates/liveClassScheduled'
 
 export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
   private queue?: Queue<EmailJob>
@@ -202,6 +203,20 @@ export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
       return
     }
 
+    if (job.data.type === 'live-class-scheduled') {
+      await this.emailSender.send({
+        to: job.data.email,
+        subject: `Live class scheduled for ${job.data.courseName}`,
+        html: liveClassScheduledEmail({
+          courseName: job.data.courseName,
+          scheduledAt: job.data.scheduledAt,
+          durationMinutes: job.data.durationMinutes,
+          joinUrl: `${this.config.STUDENT_APP_BASE_URL}/course?courseId=${encodeURIComponent(job.data.courseId)}`,
+        }),
+      })
+      return
+    }
+
     if (job.data.type === 'password-reset') {
       await this.emailSender.send({
         to: job.data.email,
@@ -294,6 +309,8 @@ const emailJobContext = (job: EmailJob) => {
       leadMinutes: job.leadMinutes,
     }
   if (job.type === 'certificate') return { jobType: job.type, certificateId: job.certificateId }
+  if (job.type === 'live-class-scheduled')
+    return { jobType: job.type, courseId: job.courseId, sessionId: job.sessionId, email: job.email }
   if (job.type === 'password-reset') return { jobType: job.type }
   return { jobType: job.type, invitationId: job.invitationId }
 }

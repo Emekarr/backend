@@ -525,6 +525,7 @@ Container.set<LiveClassService>({
       participation: container.get(DI_TOKENS.courseParticipationRepository),
       provider: container.get(DI_TOKENS.liveClassProvider),
       storage: container.get(DI_TOKENS.objectStorage),
+      emailJobs: container.get(DI_TOKENS.emailJobs),
       config: container.get(DI_TOKENS.config),
     }),
 })

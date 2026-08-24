@@ -37,7 +37,7 @@ export const createLiveClassRouter = (dependencies: {
     validateBody(schemas.liveSessionCreate),
     asyncRoute(async (request, response) => {
       const body = request.body as {
-        courseId: string | null
+        courseId: string
         scheduledAt?: string | null
         durationMinutes: number
       }
@@ -74,6 +74,20 @@ export const createLiveClassRouter = (dependencies: {
     asyncRoute(async (request, response) => {
       response.status(201).json({
         session: await dependencies.live.authorSession(
+          authenticatedAuthor(request),
+          request.params.courseId as string,
+        ),
+      })
+    }),
+  )
+  router.get(
+    '/author/courses/:courseId/live-sessions',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    asyncRoute(async (request, response) => {
+      response.json({
+        sessions: await dependencies.live.listSessionsForCourse(
           authenticatedAuthor(request),
           request.params.courseId as string,
         ),
@@ -280,6 +294,20 @@ export const createLiveClassRouter = (dependencies: {
     }),
   )
 
+  router.get(
+    '/student/courses/:courseId/live-sessions',
+    authenticateStudent(dependencies.studentAuth),
+    validateQuery(),
+    validateParams(schemas.idParams),
+    asyncRoute(async (request, response) => {
+      response.json({
+        sessions: await dependencies.live.getStudentSessions(
+          authenticatedStudent(request),
+          request.params.courseId as string,
+        ),
+      })
+    }),
+  )
   router.get(
     '/student/courses/:courseId/live-session',
     authenticateStudent(dependencies.studentAuth),

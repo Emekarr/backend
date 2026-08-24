@@ -38,6 +38,11 @@ export class LiveClassRepo implements LiveClassRepository {
     const value = await this.sessions.findOne({ courseId }).sort({ createdAt: -1 }).lean().exec()
     return value ? clean<LiveSession>(value) : null
   }
+  async listSessionsForCourse(courseId: string) {
+    return (
+      await this.sessions.find({ courseId }).sort({ scheduledAt: -1, createdAt: -1 }).lean().exec()
+    ).map(clean<LiveSession>)
+  }
   async listSessionsForAuthor(authorId: string) {
     return (
       await this.sessions.find({ authorId }).sort({ scheduledAt: -1, createdAt: -1 }).lean().exec()

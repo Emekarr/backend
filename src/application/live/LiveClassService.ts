@@ -8,6 +8,7 @@ import type {
   LiveClassRepository,
 } from '../../entities/interfaces/liveClassRepository'
 import type { ObjectStorage } from '../../entities/interfaces/storage'
+import type { EmailJobQueue } from '../../entities/interfaces/services'
 import type { Author } from '../../entities/models/Author'
 import type {
   LiveActorType,
@@ -30,6 +31,7 @@ export class LiveClassService {
       participation: CourseParticipationRepository
       provider: LiveClassProvider
       storage: ObjectStorage
+      emailJobs: EmailJobQueue
       config: EnvironmentConfig
     },
   ) {}
@@ -47,17 +49,15 @@ export class LiveClassService {
 
   async createSession(
     author: Author,
-    input: { courseId: string | null; scheduledAt?: Date | null; durationMinutes: number },
+    input: { courseId: string; scheduledAt?: Date | null; durationMinutes: number },
   ) {
-    if (input.courseId) {
-      const course = await this.requireOwnedCourse(author.id, input.courseId)
-      if (course.course.type !== 'live')
-        throw new ApplicationError(
-          'Live classes can only be attached to live courses',
-          'LIVE_COURSE_REQUIRED',
-          400,
-        )
-    }
+    const course = await this.requireOwnedCourse(author.id, input.courseId)
+    if (course.course.type !== 'live')
+      throw new ApplicationError(
+        'Live classes can only be attached to live courses',
+        'LIVE_COURSE_REQUIRED',
+        400,
+      )
     if (
       !Number.isInteger(input.durationMinutes) ||
       input.durationMinutes < 10 ||
@@ -69,10 +69,10 @@ export class LiveClassService {
         'VALIDATION_ERROR',
         400,
       )
-    return this.dependencies.live.createSession({
+    const session = await this.dependencies.live.createSession({
       courseId: input.courseId,
       authorId: author.id,
-      channelName: `class-${input.courseId ?? 'standalone'}-${generateID()}`.slice(0, 63),
+      channelName: `class-${input.courseId}-${generateID()}`.slice(0, 63),
       durationMinutes: input.durationMinutes,
       status: 'scheduled',
       scheduledAt: input.scheduledAt ?? null,
@@ -84,6 +84,42 @@ export class LiveClassService {
       whiteboardUsedAt: null,
       cameraDefaultOff: true,
     })
+    await this.notifyEnrolledStudents(session, course.course.name)
+    return session
+  }
+
+  private async notifyEnrolledStudents(session: LiveSession, courseName: string) {
+    if (!session.courseId) return
+    let participants: Awaited<
+      ReturnType<CourseParticipationRepository['listParticipants']>
+    > = []
+    try {
+      participants = await this.dependencies.participation.listParticipants(session.courseId)
+    } catch {
+      return
+    }
+    await Promise.allSettled(
+      participants.map((participant) =>
+        this.dependencies.emailJobs.enqueue({
+          type: 'live-class-scheduled',
+          courseId: session.courseId as string,
+          sessionId: session.id,
+          email: participant.student.email,
+          courseName,
+          scheduledAt: session.scheduledAt ? session.scheduledAt.toISOString() : null,
+          durationMinutes: session.durationMinutes,
+        }),
+      ),
+    )
+  }
+
+  async listSessionsForCourse(author: Author, courseId: string) {
+    await this.requireOwnedCourse(author.id, courseId)
+    return Promise.all(
+      (await this.dependencies.live.listSessionsForCourse(courseId)).map((session) =>
+        this.settleExpired(session),
+      ),
+    )
   }
 
   async listAuthorSessions(author: Author) {
@@ -108,6 +144,15 @@ export class LiveClassService {
     await this.requireEnrollment(student.id, courseId)
     const session = await this.dependencies.live.findLatestSessionForCourse(courseId)
     return session ? this.settleExpired(session) : session
+  }
+
+  async getStudentSessions(student: Student, courseId: string) {
+    await this.requireEnrollment(student.id, courseId)
+    return Promise.all(
+      (await this.dependencies.live.listSessionsForCourse(courseId)).map((session) =>
+        this.settleExpired(session),
+      ),
+    )
   }
 
   async startSession(author: Author, sessionId: string) {

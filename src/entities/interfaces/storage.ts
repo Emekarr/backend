@@ -8,6 +8,7 @@ export interface UploadRequest {
 export interface SignedUpload {
   uploadUrl: string
   attachmentPath: string
+  publicUrl?: string
   expiresInSeconds: number
   requiredHeaders: Record<string, string>
 }

@@ -34,9 +34,11 @@ const MAX_COURSE_UPLOAD_BYTES = 1024 * 1024 * 1024
 export class R2ObjectStorage implements ObjectStorage {
   private readonly client: S3Client
   private readonly bucket: string
+  private readonly publicBaseUrl?: string
 
   constructor(config: EnvironmentConfig) {
     this.bucket = config.R2_BUCKET_NAME
+    this.publicBaseUrl = config.R2_PUBLIC_BASE_URL
     this.client = new S3Client({
       region: 'auto',
       endpoint: `https://${config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -65,6 +67,7 @@ export class R2ObjectStorage implements ObjectStorage {
         signableHeaders: new Set(['content-type']),
       }),
       attachmentPath,
+      ...(this.publicBaseUrl ? { publicUrl: `${this.publicBaseUrl}/${attachmentPath}` } : {}),
       expiresInSeconds,
       requiredHeaders: {
         'content-type': input.contentType,

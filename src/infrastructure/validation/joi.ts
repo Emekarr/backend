@@ -324,7 +324,7 @@ export const schemas = {
       .required(),
   }).unknown(false),
   liveSessionCreate: Joi.object({
-    courseId: id.allow(null).required(),
+    courseId: id.required(),
     scheduledAt: Joi.string().isoDate().allow(null).optional(),
     durationMinutes: Joi.number().integer().min(10).max(300).multiple(10).required(),
   }).unknown(false),

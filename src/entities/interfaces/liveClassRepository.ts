@@ -14,6 +14,7 @@ export interface LiveClassRepository {
   createSession(input: Omit<LiveSession, 'id' | 'createdAt' | 'updatedAt'>): Promise<LiveSession>
   findSession(id: string): Promise<LiveSession | null>
   findLatestSessionForCourse(courseId: string): Promise<LiveSession | null>
+  listSessionsForCourse(courseId: string): Promise<LiveSession[]>
   listSessionsForAuthor(authorId: string): Promise<LiveSession[]>
   listRecordingsForSession(sessionId: string): Promise<LiveRecording[]>
   updateSession(

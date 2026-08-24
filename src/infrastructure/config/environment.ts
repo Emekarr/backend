@@ -84,6 +84,16 @@ const absoluteUrl = (
   return value.toString().replace(/\/$/, '')
 }
 
+const optionalAbsoluteUrl = (name: string): string | undefined => {
+  const raw = process.env[name]?.trim()
+  if (!raw) return undefined
+  try {
+    return new URL(raw).toString().replace(/\/$/, '')
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL`)
+  }
+}
+
 const paystackApiBaseUrl = (): string => {
   const raw = process.env.PAYSTACK_API_BASE_URL ?? 'https://api.paystack.co'
   let value: URL
@@ -127,6 +137,7 @@ export const config = {
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID as string,
   R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY as string,
   R2_BUCKET_NAME: process.env.R2_BUCKET_NAME as string,
+  R2_PUBLIC_BASE_URL: optionalAbsoluteUrl('R2_PUBLIC_BASE_URL'),
   AGORA_APP_ID: process.env.AGORA_APP_ID,
   AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE,
   AGORA_CUSTOMER_ID: process.env.AGORA_CUSTOMER_ID,
