@@ -5,14 +5,30 @@ export type FrontendSession = 'admin' | 'author' | 'student'
 type TokenKind = 'access' | 'refresh' | 'challenge' | 'setup'
 
 const cookieName = (frontend: FrontendSession, kind: TokenKind) => `danvic_${frontend}_${kind}`
-const cookieOptions = (maxAgeSeconds: number) => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? ('none' as const) : ('lax' as const),
-  partitioned: process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: maxAgeSeconds * 1000,
-})
+const isCrossSiteRequest = (request?: Request): boolean => {
+  const origin = request?.headers.origin
+  const host = request?.headers.host?.split(':', 1)[0]
+  if (!origin || !host) return process.env.NODE_ENV === 'production'
+  try {
+    return new URL(origin).hostname !== host
+  } catch {
+    return process.env.NODE_ENV === 'production'
+  }
+}
+
+const cookieOptions = (maxAgeSeconds: number, request?: Request) => {
+  const crossSite = isCrossSiteRequest(request)
+  return {
+    httpOnly: true,
+    // A deployed static frontend and the API are different sites. Lax cookies are
+    // not sent on its fetches, which looks like an immediate logout after login.
+    secure: crossSite || process.env.NODE_ENV === 'production',
+    sameSite: crossSite ? ('none' as const) : ('lax' as const),
+    partitioned: crossSite,
+    path: '/',
+    maxAge: maxAgeSeconds * 1000,
+  }
+}
 
 const cookies = (request: Request): Record<string, string> =>
   Object.fromEntries(
@@ -64,7 +80,11 @@ export const authenticateSession = async <User>(
     if (!refreshToken) throw error
 
     const accessToken = await auth.renewAccess(refreshToken)
-    response.cookie(cookieName(frontend, 'access'), accessToken, cookieOptions(2 * 60 * 60))
+    response.cookie(
+      cookieName(frontend, 'access'),
+      accessToken,
+      cookieOptions(2 * 60 * 60, request),
+    )
     return auth.authenticate(accessToken)
   }
 }
@@ -73,34 +93,49 @@ export const setSession = (
   response: Response,
   frontend: FrontendSession,
   tokens: { accessToken: string; refreshToken: string },
+  request?: Request,
 ): void => {
-  response.cookie(cookieName(frontend, 'access'), tokens.accessToken, cookieOptions(2 * 60 * 60))
+  response.cookie(
+    cookieName(frontend, 'access'),
+    tokens.accessToken,
+    cookieOptions(2 * 60 * 60, request),
+  )
   response.cookie(
     cookieName(frontend, 'refresh'),
     tokens.refreshToken,
-    cookieOptions(30 * 24 * 60 * 60),
+    cookieOptions(30 * 24 * 60 * 60, request),
   )
-  response.clearCookie(cookieName(frontend, 'challenge'), cookieOptions(0))
-  response.clearCookie(cookieName(frontend, 'setup'), cookieOptions(0))
+  response.clearCookie(cookieName(frontend, 'challenge'), cookieOptions(0, request))
+  response.clearCookie(cookieName(frontend, 'setup'), cookieOptions(0, request))
 }
 
 export const setChallenge = (
   response: Response,
   frontend: FrontendSession,
   token: string,
+  request?: Request,
 ): void => {
-  response.cookie(cookieName(frontend, 'challenge'), token, cookieOptions(5 * 60))
-  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0))
-  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0))
+  response.cookie(cookieName(frontend, 'challenge'), token, cookieOptions(5 * 60, request))
+  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0, request))
+  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0, request))
 }
 
-export const setSetup = (response: Response, frontend: FrontendSession, token: string): void => {
-  response.cookie(cookieName(frontend, 'setup'), token, cookieOptions(10 * 60))
-  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0))
-  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0))
+export const setSetup = (
+  response: Response,
+  frontend: FrontendSession,
+  token: string,
+  request?: Request,
+): void => {
+  response.cookie(cookieName(frontend, 'setup'), token, cookieOptions(10 * 60, request))
+  response.clearCookie(cookieName(frontend, 'access'), cookieOptions(0, request))
+  response.clearCookie(cookieName(frontend, 'refresh'), cookieOptions(0, request))
 }
 
-export const clearSession = (response: Response, frontend: FrontendSession): void => {
+export const clearSession = (
+  response: Response,
+  frontend: FrontendSession,
+  request?: Request,
+): void => {
   for (const kind of ['access', 'refresh', 'challenge', 'setup'] as const)
-    response.clearCookie(cookieName(frontend, kind), cookieOptions(0))
+    response.clearCookie(cookieName(frontend, kind), cookieOptions(0, request))
 }

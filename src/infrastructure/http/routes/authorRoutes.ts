@@ -40,8 +40,8 @@ export const createAuthorRouter = (dependencies: {
       const body = request.body as { email: string; password: string }
       setActivity(request, { action: 'author.login', actorEmail: body.email })
       const result = await dependencies.authorAuth.login(body.email, body.password)
-      if (result.status === 'authenticated') setSession(response, 'author', result)
-      else setChallenge(response, 'author', result.challengeToken)
+      if (result.status === 'authenticated') setSession(response, 'author', result, request)
+      else setChallenge(response, 'author', result.challengeToken, request)
       const next = result.status === 'authenticated' ? '/dashboard' : '/two-factor'
       response.status(result.status === 'authenticated' ? 200 : 202).json({ ...result, next })
     }),
@@ -54,7 +54,7 @@ export const createAuthorRouter = (dependencies: {
     limit(dependencies.rateLimiter, 'author-refresh', 30, 60),
     asyncRoute(async (request, response) => {
       const tokens = await dependencies.authorAuth.refresh(bearer(request, 'refresh'))
-      setSession(response, 'author', tokens)
+      setSession(response, 'author', tokens, request)
       response.status(200).json(tokens)
     }),
   )
@@ -65,7 +65,7 @@ export const createAuthorRouter = (dependencies: {
     validateBody(schemas.empty),
     asyncRoute(async (request, response) => {
       await dependencies.authorAuth.logout(bearer(request, 'refresh'))
-      clearSession(response, 'author')
+      clearSession(response, 'author', request)
       response.status(200).json(null)
     }),
   )
@@ -106,7 +106,7 @@ export const createAuthorRouter = (dependencies: {
         bearer(request),
         (request.body as { code: string }).code,
       )
-      setSession(response, 'author', tokens)
+      setSession(response, 'author', tokens, request)
       response.json({ ...tokens, next: '/dashboard' })
     }),
   )

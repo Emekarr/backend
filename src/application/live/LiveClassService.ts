@@ -170,7 +170,7 @@ export class LiveClassService {
     if (startedAt.getTime() < settled.scheduledAt.getTime())
       throw conflict(`This class can be started at ${settled.scheduledAt.toISOString()}`)
     const expiresAt = this.windowEndsAt(settled)
-    if (expiresAt.getTime() <= startedAt.getTime())
+    if (!expiresAt || expiresAt.getTime() <= startedAt.getTime())
       throw conflict('The scheduled time for this class has already passed')
     let whiteboardRoomUuid = settled.whiteboardRoomUuid
     if (!whiteboardRoomUuid)
@@ -673,16 +673,16 @@ export class LiveClassService {
   private async settleExpired(session: LiveSession): Promise<LiveSession> {
     if (session.status === 'ended') return session
     const expiresAt = session.expiresAt ?? this.windowEndsAt(session)
-    if (expiresAt.getTime() > Date.now()) return session
+    if (!expiresAt || expiresAt.getTime() > Date.now()) return session
     return this.dependencies.live.updateSession(session.id, {
       status: 'ended',
       endedAt: expiresAt,
       whiteboardActive: false,
     })
   }
-  private windowEndsAt(session: LiveSession): Date {
+  private windowEndsAt(session: LiveSession): Date | null {
     const start = session.scheduledAt ?? session.startedAt
-    if (!start) return new Date(Number.MAX_SAFE_INTEGER)
+    if (!start) return null
     return new Date(start.getTime() + session.durationMinutes * 60_000)
   }
   private async requireOwnedCourse(authorId: string, courseId: string) {
