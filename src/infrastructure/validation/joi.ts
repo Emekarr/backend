@@ -385,6 +385,13 @@ export const schemas = {
       .messages({ 'number.max': 'Each file must be 1 GiB or smaller' })
       .required(),
   }).unknown(false),
+  uploadView: Joi.object({
+    attachmentPath: Joi.string()
+      .pattern(
+        /^courses\/[0-9A-HJKMNP-TV-Z]{26}\/[0-9A-HJKMNP-TV-Z]{26}\.(pdf|jpg|png|svg|gif|webp|mp4|mov|webm|mp3|wav|m4a|ogg|txt|csv|doc|docx|ppt|pptx|xls|xlsx|zip)$/,
+      )
+      .required(),
+  }).unknown(false),
   assessment: Joi.object({
     title: plainText(200).required(),
     description: plainText(5000).required(),

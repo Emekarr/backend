@@ -313,12 +313,30 @@ export const createCourseRouter = (dependencies: {
     }),
   )
 
+  router.post(
+    '/author/uploads/view',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateBody(schemas.uploadView),
+    asyncRoute(async (request, response) => {
+      setActivity(request, { action: 'upload.view' })
+      response.json(
+        await dependencies.courses.createOwnedUploadView(
+          authenticatedAuthor(request),
+          (request.body as { attachmentPath: string }).attachmentPath,
+        ),
+      )
+    }),
+  )
+
   router.get(
     '/courses',
     validateQuery(schemas.catalog),
     asyncRoute(async (request, response) => {
       setActivity(request, { action: 'course.catalog.access' })
-      response.json({ courses: await dependencies.courses.listAvailable(String(request.query.query ?? '')) })
+      response.json({
+        courses: await dependencies.courses.listAvailable(String(request.query.query ?? '')),
+      })
     }),
   )
 

@@ -404,6 +404,11 @@ export class CourseService {
     return this.dependencies.storage.createSignedUpload({ ...input, ownerId: author.id })
   }
 
+  async createOwnedUploadView(author: Author, attachmentPath: string) {
+    await this.assertAttachments(author.id, [attachmentPath])
+    return this.dependencies.storage.createSignedView(attachmentPath)
+  }
+
   private assertLiveClassDuration(type: CourseType, duration: number | null): void {
     if (type === 'live' && (!duration || duration < 10 || duration > 300 || duration % 10 !== 0))
       throw new ApplicationError(

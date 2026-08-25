@@ -67,6 +67,17 @@ export class R2ObjectStorage implements ObjectStorage {
         signableHeaders: new Set(['content-type']),
       }),
       attachmentPath,
+      // The editor needs to display a private image immediately after its PUT. Store the
+      // stable attachment path in the document; this URL is only the short-lived preview.
+      viewUrl: await getSignedUrl(
+        this.client,
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: attachmentPath,
+          ResponseContentDisposition: 'inline',
+        }),
+        { expiresIn: 5 * 60 },
+      ),
       ...(this.publicBaseUrl ? { publicUrl: `${this.publicBaseUrl}/${attachmentPath}` } : {}),
       expiresInSeconds,
       requiredHeaders: {

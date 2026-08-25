@@ -8,6 +8,8 @@ export interface UploadRequest {
 export interface SignedUpload {
   uploadUrl: string
   attachmentPath: string
+  /** A short-lived inline URL for displaying a just-uploaded file. */
+  viewUrl: string
   publicUrl?: string
   expiresInSeconds: number
   requiredHeaders: Record<string, string>
