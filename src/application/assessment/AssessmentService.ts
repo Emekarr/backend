@@ -71,6 +71,12 @@ export class AssessmentService {
         'INVALID_MAX_ATTEMPTS',
         400,
       )
+    if (input.durationMinutes < 5 || input.durationMinutes > 180)
+      throw new ApplicationError(
+        'The assessment time must be between 5 and 180 minutes',
+        'INVALID_DURATION',
+        400,
+      )
     const attachmentCount = input.questions.filter((question) => question.mediaUrl).length
     if (attachmentCount > 10)
       throw new ApplicationError(

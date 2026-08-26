@@ -396,7 +396,7 @@ export const schemas = {
     title: plainText(200).required(),
     description: plainText(5000).required(),
     courseId: id.required(),
-    durationMinutes: Joi.number().integer().min(1).max(1440).required(),
+    durationMinutes: Joi.number().integer().min(5).max(180).required(),
     opensAt: Joi.string().isoDate().required(),
     closesAt: Joi.string().isoDate().required(),
     manualReview: Joi.boolean().required(),
