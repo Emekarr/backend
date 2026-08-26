@@ -463,7 +463,7 @@ export const schemas = {
               }).unknown(false),
             )
             .max(10)
-            .required(),
+            .optional(),
           points: Joi.number().integer().min(1).max(1000).required(),
         }).unknown(false),
       )
