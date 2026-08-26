@@ -14,6 +14,15 @@ const optionSchema = new Schema(
   { _id: false },
 )
 
+const resourceSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    attachmentPath: { type: String, required: true, maxlength: 2048 },
+    fileName: { type: String, required: true, trim: true, maxlength: 200 },
+  },
+  { _id: false },
+)
+
 const questionSchema = new Schema(
   {
     id: { type: String, required: true },
@@ -23,6 +32,7 @@ const questionSchema = new Schema(
     correctOptionIds: { type: [String], default: [] },
     mediaType: { type: String, enum: [...ASSESSMENT_MEDIA_TYPES, null], default: null },
     mediaUrl: { type: String, default: null, maxlength: 2048 },
+    resources: { type: [resourceSchema], default: [] },
     points: { type: Number, required: true, min: 1, max: 1000 },
   },
   { _id: false },

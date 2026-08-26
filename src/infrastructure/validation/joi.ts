@@ -450,6 +450,20 @@ export const schemas = {
               Joi.valid(null),
             )
             .optional(),
+          resources: Joi.array()
+            .items(
+              Joi.object({
+                id: Joi.string().pattern(/^[A-Za-z0-9_-]{1,100}$/).required(),
+                attachmentPath: Joi.string()
+                  .pattern(
+                    /^courses\/[0-9A-HJKMNP-TV-Z]{26}\/[0-9A-HJKMNP-TV-Z]{26}\.(pdf|jpg|png|svg|gif|webp|mp4|mov|webm|mp3|wav|m4a|ogg|txt|csv|doc|docx|ppt|pptx|xls|xlsx|zip)$/,
+                  )
+                  .required(),
+                fileName: plainText(200).required(),
+              }).unknown(false),
+            )
+            .max(10)
+            .required(),
           points: Joi.number().integer().min(1).max(1000).required(),
         }).unknown(false),
       )

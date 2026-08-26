@@ -10,6 +10,12 @@ export interface AssessmentOption {
   label: string
 }
 
+export interface AssessmentQuestionResource {
+  id: string
+  attachmentPath: string
+  fileName: string
+}
+
 export interface AssessmentQuestion {
   id: string
   prompt: string
@@ -18,6 +24,7 @@ export interface AssessmentQuestion {
   correctOptionIds: string[]
   mediaType: AssessmentMediaType | null
   mediaUrl: string | null
+  resources: AssessmentQuestionResource[]
   points: number
 }
 

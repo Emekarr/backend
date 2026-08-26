@@ -33,6 +33,7 @@ export interface CreateAssessmentInput {
     correctOptionIds: string[]
     mediaType?: AssessmentMediaType | null
     mediaUrl?: string | null
+    resources?: Array<{ id: string; attachmentPath: string; fileName: string }>
     points: number
   }>
 }
@@ -107,6 +108,23 @@ export class AssessmentService {
           'INVALID_QUESTION_MEDIA',
           400,
         )
+      if ((question.resources?.length ?? 0) > 10)
+        throw new ApplicationError(
+          'A question can contain no more than 10 resources',
+          'QUESTION_RESOURCE_LIMIT',
+          400,
+        )
+      for (const resource of question.resources ?? []) {
+        if (
+          !resource.attachmentPath.startsWith(`courses/${author.id}/`) ||
+          !(await this.dependencies.storage.exists(resource.attachmentPath))
+        )
+          throw new ApplicationError(
+            'A question resource upload is missing or does not belong to you',
+            'INVALID_QUESTION_RESOURCE',
+            400,
+          )
+      }
     }
 
     const questions = input.questions.map((question) => {
@@ -150,6 +168,11 @@ export class AssessmentService {
           question.type === 'multiple_choice' ? [...new Set(question.correctOptionIds)] : [],
         mediaType: question.mediaType ?? null,
         mediaUrl: question.mediaUrl?.trim() || null,
+        resources: (question.resources ?? []).map((resource) => ({
+          id: resource.id,
+          attachmentPath: resource.attachmentPath,
+          fileName: resource.fileName.trim(),
+        })),
         points: question.points,
       }
     })
@@ -507,6 +530,15 @@ export class AssessmentService {
           mediaUrl: question.mediaUrl?.startsWith('courses/')
             ? (await this.dependencies.storage.createSignedView(question.mediaUrl)).viewUrl
             : question.mediaUrl,
+          resources: await Promise.all(
+            question.resources.map(async (resource) => ({
+              id: resource.id,
+              fileName: resource.fileName,
+              url: resource.attachmentPath.startsWith('courses/')
+                ? (await this.dependencies.storage.createSignedView(resource.attachmentPath)).viewUrl
+                : resource.attachmentPath,
+            })),
+          ),
         })),
       ),
     }
