@@ -154,6 +154,14 @@ export class AssessmentService {
       }
     })
 
+    const totalScore = questions.reduce((sum, question) => sum + question.points, 0)
+    if (totalScore <= 0 || Math.ceil((totalScore * input.passingScorePercent) / 100) > totalScore)
+      throw new ApplicationError(
+        'The pass mark cannot be higher than the total score achievable from the questions',
+        'PASS_MARK_UNACHIEVABLE',
+        400,
+      )
+
     const assessment = await this.dependencies.assessments.create({
       title: input.title.trim(),
       description: input.description.trim(),
