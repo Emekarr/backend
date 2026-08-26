@@ -531,7 +531,7 @@ export class AssessmentService {
             ? (await this.dependencies.storage.createSignedView(question.mediaUrl)).viewUrl
             : question.mediaUrl,
           resources: await Promise.all(
-            question.resources.map(async (resource) => ({
+            (question.resources ?? []).map(async (resource) => ({
               id: resource.id,
               fileName: resource.fileName,
               url: resource.attachmentPath.startsWith('courses/')
