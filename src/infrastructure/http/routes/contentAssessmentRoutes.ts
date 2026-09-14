@@ -553,7 +553,7 @@ export const createContentAssessmentRouter = (dependencies: {
 }
 
 type GovernanceReviewBody = {
-  versionId: string
+  versionId?: string | null
   decision: ReviewDecisionInput['decision']
   summary: string
   criteria: Record<
@@ -588,6 +588,7 @@ const contentQuery = (request: Request): ContentListQuery => ({
   contentId: request.query.contentId as string | undefined,
   courseId: request.query.courseId as string | undefined,
   type: request.query.type as ContentListQuery['type'],
+  attachment: request.query.attachment as ContentListQuery['attachment'],
   status: request.query.status as ContentListQuery['status'],
   sort: request.query.sort as ContentListQuery['sort'],
   page: integerQuery(request.query.page),

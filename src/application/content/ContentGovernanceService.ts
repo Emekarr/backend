@@ -48,6 +48,7 @@ export interface ContentListQuery {
   contentId?: string
   courseId?: string
   type?: ContentType
+  attachment?: 'with' | 'without'
   status?:
     | ContentReviewStatus
     | ContentPublicationStatus
@@ -61,7 +62,7 @@ export interface ContentListQuery {
 }
 
 export interface ReviewDecisionInput {
-  versionId: string
+  versionId?: string | null
   decision: 'approved' | 'rejected' | 'needs_revision'
   summary: string
   criteria: CriterionReview[]
@@ -112,6 +113,8 @@ export class ContentGovernanceService {
     if (query.contentId) items = items.filter((item) => item.id === query.contentId)
     if (query.courseId) items = items.filter((item) => item.courseId === query.courseId)
     if (query.type) items = items.filter((item) => item.type === query.type)
+    if (query.attachment)
+      items = items.filter((item) => item.hasAttachment === (query.attachment === 'with'))
     if (query.status)
       items = items.filter(
         (item) => item.reviewStatus === query.status || item.publicationStatus === query.status,
@@ -166,6 +169,9 @@ export class ContentGovernanceService {
     return {
       content,
       versions: await this.presentVersions(versions),
+      versionSnapshots: Object.fromEntries(
+        versions.map((version) => [version.id, version.payload]),
+      ),
       reviews: await this.presentReviews(reviews),
       currentPayload: source.payload,
       reviewSchedule:
@@ -372,13 +378,36 @@ export class ContentGovernanceService {
   async review(admin: Admin, contentId: string, input: ReviewDecisionInput) {
     assertPermission(admin, 'review_content')
     const source = await this.source(contentId)
-    const state = stateOf(source.entity)
-    if (state.reviewStatus !== 'pending_review' || state.currentVersionId !== input.versionId)
+    let state = stateOf(source.entity)
+    if (state.reviewStatus !== 'pending_review')
+      throw new ApplicationError('Content is not awaiting review', 'INVALID_TRANSITION', 409)
+    let versionId = input.versionId ?? state.currentVersionId
+    if (state.currentVersionId && versionId !== state.currentVersionId)
       throw new ApplicationError(
-        'Content is not awaiting review at this version',
-        'INVALID_TRANSITION',
+        'Content changed while it was awaiting review',
+        'VERSION_CONFLICT',
         409,
       )
+    if (!versionId) {
+      const versions = await this.dependencies.governance.listVersions(contentId)
+      const version = await this.dependencies.governance.createVersion({
+        contentId,
+        sourceType: source.sourceType,
+        sourceId: source.sourceId,
+        label: `v${Math.max(0, ...versions.map((item) => item.number)) + 1}.0`,
+        number: Math.max(0, ...versions.map((item) => item.number)) + 1,
+        state: 'submitted',
+        changeSummary: 'Initial tutor submission',
+        createdById: authorId(source.entity),
+        createdByType: 'author',
+        payload: source.payload,
+        publishedAt: null,
+        publishedById: null,
+      })
+      versionId = version.id
+      await this.updateSource(source, { currentVersionId: version.id, submittedAt: new Date() })
+      state = stateOf((await this.source(contentId)).entity)
+    }
     if (
       (input.decision === 'rejected' || input.decision === 'needs_revision') &&
       !input.summary.trim()
@@ -388,7 +417,7 @@ export class ContentGovernanceService {
         'VALIDATION_ERROR',
         400,
       )
-    const version = await this.dependencies.governance.findVersion(input.versionId)
+    const version = await this.dependencies.governance.findVersion(versionId)
     if (!version || version.contentId !== contentId || version.state !== 'submitted')
       throw new ApplicationError('The submitted version has changed', 'VERSION_CONFLICT', 409)
     let review: ContentReview
@@ -676,11 +705,11 @@ export class ContentGovernanceService {
         authorId: author.id,
         courseId: input.courseId ?? null,
         ...normalized,
-        reviewStatus: 'draft',
+        reviewStatus: 'pending_review',
         publicationStatus: 'unpublished',
         currentVersionId: null,
         publishedVersionId: null,
-        submittedAt: null,
+        submittedAt: new Date(),
         approvedAt: null,
         publishedAt: null,
         archivedAt: null,
@@ -801,6 +830,17 @@ export class ContentGovernanceService {
       this.dependencies.governance.listVersions(),
       this.dependencies.governance.listSchedules(),
     ])
+    const courseAttachmentFlags = new Map(
+      await Promise.all(
+        courses.map(
+          async (course) =>
+            [
+              course.id,
+              Boolean((await this.dependencies.courses.findById(course.id))?.attachments.length),
+            ] as const,
+        ),
+      ),
+    )
     const presentedVersions = await this.presentVersions(versions)
     const versionById = new Map(presentedVersions.map((version) => [version.id, version]))
     const authors = await this.authorMap([
@@ -818,6 +858,7 @@ export class ContentGovernanceService {
           null,
           course.currentVersionId ? (versionById.get(course.currentVersionId) ?? null) : null,
           schedules.find((schedule) => schedule.contentId === course.id)?.reviewAt ?? null,
+          courseAttachmentFlags.get(course.id) ?? false,
         ),
       ),
       ...assessments.map((assessment) =>
@@ -835,6 +876,9 @@ export class ContentGovernanceService {
             ? (versionById.get(assessment.currentVersionId) ?? null)
             : null,
           schedules.find((schedule) => schedule.contentId === assessment.id)?.reviewAt ?? null,
+          assessment.questions.some(
+            (question) => Boolean(question.mediaUrl) || Boolean(question.resources?.length),
+          ),
         ),
       ),
       ...questions.map((question) =>
@@ -1044,6 +1088,7 @@ const presentSource = (
   courseName: string | null,
   currentVersion: ReturnType<typeof presentVersion> = null,
   nextReviewAt: Date | null = null,
+  hasAttachment = false,
 ) => {
   const entity = source.entity
   const state = stateOf(entity)
@@ -1072,6 +1117,7 @@ const presentSource = (
     reviewScores: Object.fromEntries(
       (latestReview?.criteria ?? []).map((criterion) => [criterion.criterion, criterion.score]),
     ),
+    hasAttachment,
     nextReviewAt,
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,

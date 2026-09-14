@@ -521,6 +521,7 @@ export const schemas = {
     search: Joi.string().trim().max(200).allow('').optional(),
     authorId: id.optional(),
     courseId: id.optional(),
+    attachment: Joi.string().valid('with', 'without').optional(),
     type: Joi.string()
       .valid('lesson', 'video', 'document', 'assignment', 'quiz', 'exam', 'question')
       .optional(),
@@ -593,7 +594,7 @@ export const schemas = {
     points: Joi.number().integer().min(1).max(1000).required(),
   }).unknown(false),
   governanceReview: Joi.object({
-    versionId: id.required(),
+    versionId: id.allow(null).optional(),
     decision: Joi.string().valid('approved', 'rejected', 'needs_revision').required(),
     summary: Joi.string().trim().max(5000).allow('').required(),
     criteria: Joi.object({

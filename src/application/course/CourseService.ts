@@ -93,11 +93,11 @@ export class CourseService {
         accessType: input.accessType,
         priceKobo,
         createdByAuthorId: author.id,
-        reviewStatus: 'draft',
+        reviewStatus: 'pending_review',
         publicationStatus: 'unpublished',
         currentVersionId: null,
         publishedVersionId: null,
-        submittedAt: null,
+        submittedAt: new Date(),
         approvedAt: null,
         publishedAt: null,
         archivedAt: null,
@@ -110,8 +110,8 @@ export class CourseService {
       attachments: input.attachments,
     })
     await this.dependencies.notifications.publish({
-      title: 'Course draft created',
-      body: `${aggregate.course.name} was created by ${author.firstName} ${author.lastName} and is awaiting submission.`,
+      title: 'Course submitted for review',
+      body: `${aggregate.course.name} was created by ${author.firstName} ${author.lastName} and is awaiting review.`,
       link: `/courses/detail?id=${encodeURIComponent(aggregate.course.id)}`,
     })
     return aggregate
