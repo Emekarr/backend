@@ -22,6 +22,7 @@ export interface CourseCatalogRepository {
   findAll(): Promise<Course[]>
   findByAuthor(authorId: string): Promise<Course[]>
   findAvailable(now: Date): Promise<Course[]>
+  updateGovernance(id: string, input: Partial<Course>): Promise<Course | null>
   updateCourse(
     id: string,
     input: Pick<

@@ -3,10 +3,13 @@ import type { AssessmentAttempt, CreateAssessmentAttempt } from '../models/Asses
 
 export interface AssessmentRepository {
   create(input: CreateAssessment): Promise<Assessment>
+  update(id: string, input: Partial<Assessment>): Promise<Assessment | null>
   findById(id: string): Promise<Assessment | null>
   findByAuthor(authorId: string): Promise<Assessment[]>
   findByCourseId(courseId: string): Promise<Assessment | null>
+  findAll(): Promise<Assessment[]>
   findOpen(now: Date): Promise<Assessment[]>
+  updateGovernance(id: string, input: Partial<Assessment>): Promise<Assessment | null>
   createAttempt(input: CreateAssessmentAttempt): Promise<AssessmentAttempt>
   findAttempt(id: string): Promise<AssessmentAttempt | null>
   findAttemptForStudent(assessmentId: string, studentId: string): Promise<AssessmentAttempt | null>

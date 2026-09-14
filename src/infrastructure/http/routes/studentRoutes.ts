@@ -21,7 +21,6 @@ import {
   sessionToken,
   setChallenge,
   setSession,
-  setSetup,
 } from '../sessionCookies'
 import { schemas, validateBody, validateParams, validateQuery } from '../../validation/joi'
 
@@ -51,11 +50,13 @@ export const createStudentRouter = (dependencies: {
       const body = request.body as { email: string; password: string }
       setActivity(request, { action: 'student.login', actorEmail: body.email })
       const result = await dependencies.studentAuth.login(body.email, body.password)
-      if (result.status === 'two-factor-required')
+      if (result.status === 'two-factor-required') {
         setChallenge(response, 'student', result.challengeToken)
-      else setSetup(response, 'student', result.setupToken)
-      const next = result.status === 'two-factor-required' ? '/two-factor' : '/two-factor/setup'
-      response.status(202).json({ ...result, next })
+        response.status(202).json({ ...result, next: '/two-factor' })
+        return
+      }
+      setSession(response, 'student', result, request)
+      response.status(200).json({ ...result, next: '/dashboard' })
     }),
   )
 
@@ -110,25 +111,29 @@ export const createStudentRouter = (dependencies: {
 
   router.post(
     '/student/auth/2fa/setup',
+    authenticateStudent(dependencies.studentAuth),
     validateQuery(),
     validateBody(schemas.empty),
     limit(dependencies.rateLimiter, 'student-2fa-setup', 10, 300),
     asyncRoute(async (request, response) => {
-      response.json(await dependencies.studentAuth.beginTwoFactorSetup(bearer(request, 'setup')))
+      response.json(
+        await dependencies.studentAuth.beginTwoFactorSetup((request as StudentRequest).student),
+      )
     }),
   )
 
   router.post(
     '/student/auth/2fa/confirm',
+    authenticateStudent(dependencies.studentAuth),
     validateQuery(),
     validateBody(schemas.twoFactorCode),
     limit(dependencies.rateLimiter, 'student-2fa-confirm', 10, 300),
     asyncRoute(async (request, response) => {
       const tokens = await dependencies.studentAuth.confirmTwoFactorSetup(
-        bearer(request, 'setup'),
+        (request as StudentRequest).student,
         (request.body as { code: string }).code,
       )
-      setSession(response, 'student', tokens)
+      setSession(response, 'student', tokens, request)
       response.json({ ...tokens, next: '/dashboard' })
     }),
   )

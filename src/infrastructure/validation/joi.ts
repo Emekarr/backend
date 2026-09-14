@@ -396,6 +396,7 @@ export const schemas = {
     title: plainText(200).required(),
     description: plainText(5000).required(),
     courseId: id.required(),
+    kind: Joi.string().valid('assignment', 'quiz', 'exam').optional(),
     durationMinutes: Joi.number().integer().min(5).max(180).required(),
     opensAt: Joi.string().isoDate().required(),
     closesAt: Joi.string().isoDate().required(),
@@ -453,7 +454,9 @@ export const schemas = {
           resources: Joi.array()
             .items(
               Joi.object({
-                id: Joi.string().pattern(/^[A-Za-z0-9_-]{1,100}$/).required(),
+                id: Joi.string()
+                  .pattern(/^[A-Za-z0-9_-]{1,100}$/)
+                  .required(),
                 attachmentPath: Joi.string()
                   .pattern(
                     /^courses\/[0-9A-HJKMNP-TV-Z]{26}\/[0-9A-HJKMNP-TV-Z]{26}\.(pdf|jpg|png|svg|gif|webp|mp4|mov|webm|mp3|wav|m4a|ogg|txt|csv|doc|docx|ppt|pptx|xls|xlsx|zip)$/,
@@ -500,6 +503,145 @@ export const schemas = {
       .required(),
   }).unknown(false),
   certificateEmail: Joi.object({ email }).unknown(false),
+  contentParams: Joi.object({ contentId: id }).unknown(false),
+  questionParams: Joi.object({ questionId: id }).unknown(false),
+  contentListQuery: Joi.object({
+    bucket: Joi.string()
+      .valid(
+        'all',
+        'pending',
+        'approved',
+        'rejected',
+        'published',
+        'archived',
+        'draft',
+        'controlled_update',
+      )
+      .optional(),
+    search: Joi.string().trim().max(200).allow('').optional(),
+    authorId: id.optional(),
+    courseId: id.optional(),
+    type: Joi.string()
+      .valid('lesson', 'video', 'document', 'assignment', 'quiz', 'exam', 'question')
+      .optional(),
+    status: Joi.string()
+      .valid(
+        'draft',
+        'pending_review',
+        'approved',
+        'rejected',
+        'needs_revision',
+        'unpublished',
+        'published',
+        'archived',
+        'scheduled',
+        'in_progress',
+        'completed',
+        'cancelled',
+      )
+      .optional(),
+    sort: Joi.string().valid('newest', 'oldest', 'pending_first').optional(),
+    page: Joi.string().pattern(/^\d+$/).optional(),
+    limit: Joi.string().pattern(/^\d+$/).optional(),
+    kind: Joi.string().valid('assignment', 'quiz', 'exam', 'question').optional(),
+    segment: Joi.string()
+      .valid('all', 'pending', 'approved', 'rejected', 'needs_revision')
+      .optional(),
+    criterion: Joi.string()
+      .valid(
+        'technical_accuracy',
+        'brand_consistency',
+        'copyright_ip',
+        'safety_regulatory',
+        'content_quality',
+      )
+      .optional(),
+    contentId: id.optional(),
+    from: Joi.string().isoDate().optional(),
+    to: Joi.string().isoDate().optional(),
+    format: Joi.string().valid('csv').optional(),
+  }).unknown(false),
+  contentSubmission: Joi.object({
+    versionId: id.allow(null).optional(),
+    submissionNote: plainText(5000).allow(null).optional(),
+  }).unknown(false),
+  controlledUpdate: Joi.object({
+    sourceVersionId: id.optional(),
+    changeSummary: plainText(5000).required(),
+  }).unknown(false),
+  questionBankItem: Joi.object({
+    courseId: id.allow(null).optional(),
+    prompt: plainText(5000).required(),
+    type: Joi.string().valid('multiple_choice', 'free_text').required(),
+    options: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.string()
+            .pattern(/^[A-Za-z0-9_-]{1,100}$/)
+            .required(),
+          label: plainText(500).required(),
+        }).unknown(false),
+      )
+      .max(20)
+      .unique('id')
+      .required(),
+    correctOptionIds: Joi.array()
+      .items(Joi.string().pattern(/^[A-Za-z0-9_-]{1,100}$/))
+      .max(20)
+      .unique()
+      .required(),
+    points: Joi.number().integer().min(1).max(1000).required(),
+  }).unknown(false),
+  governanceReview: Joi.object({
+    versionId: id.required(),
+    decision: Joi.string().valid('approved', 'rejected', 'needs_revision').required(),
+    summary: Joi.string().trim().max(5000).allow('').required(),
+    criteria: Joi.object({
+      technicalAccuracy: Joi.object({
+        score: Joi.number().min(0).max(100).allow(null).required(),
+        comment: Joi.string().trim().max(5000).allow('', null).required(),
+      }).unknown(false),
+      brandConsistency: Joi.object({
+        score: Joi.number().min(0).max(100).allow(null).required(),
+        comment: Joi.string().trim().max(5000).allow('', null).required(),
+      }).unknown(false),
+      copyrightIp: Joi.object({
+        score: Joi.number().min(0).max(100).allow(null).required(),
+        comment: Joi.string().trim().max(5000).allow('', null).required(),
+      }).unknown(false),
+      safetyRegulatory: Joi.object({
+        score: Joi.number().min(0).max(100).allow(null).required(),
+        comment: Joi.string().trim().max(5000).allow('', null).required(),
+      }).unknown(false),
+      contentQuality: Joi.object({
+        score: Joi.number().min(0).max(100).allow(null).required(),
+        comment: Joi.string().trim().max(5000).allow('', null).required(),
+      }).unknown(false),
+    })
+      .required()
+      .unknown(false),
+    nextReviewAt: Joi.string().isoDate().allow(null).optional(),
+  }).unknown(false),
+  governancePublish: Joi.object({ versionId: id.required() }).unknown(false),
+  governanceArchive: Joi.object({ reason: plainText(5000).allow(null).optional() }).unknown(false),
+  reviewSchedule: Joi.object({
+    reviewAt: Joi.string().isoDate().required(),
+    reviewerId: id.optional(),
+  }).unknown(false),
+  mfaPolicy: Joi.object({
+    admins: Joi.object({ login: Joi.string().valid('required').required() })
+      .required()
+      .unknown(false),
+    authors: Joi.object({ login: Joi.string().valid('required').required() })
+      .required()
+      .unknown(false),
+    students: Joi.object({
+      login: Joi.string().valid('optional').required(),
+      beforeEnrollment: Joi.string().valid('required').required(),
+    })
+      .required()
+      .unknown(false),
+  }).unknown(false),
   liveParticipantState: Joi.object({
     microphoneOn: Joi.boolean(),
     cameraOn: Joi.boolean(),

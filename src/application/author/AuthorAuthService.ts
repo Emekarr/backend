@@ -41,6 +41,7 @@ export class AuthorAuthService {
   ): Promise<
     | { status: 'authenticated'; accessToken: string; refreshToken: string }
     | { status: 'two-factor-required'; challengeToken: string }
+    | { status: 'two-factor-setup-required'; setupToken: string }
   > {
     const author = await this.dependencies.authors.findByEmailForAuthentication(
       email.trim().toLowerCase(),
@@ -51,13 +52,18 @@ export class AuthorAuthService {
     )
     if (!author || !valid || author.disabledAt)
       throw new ApplicationError('Invalid email or password', 'INVALID_CREDENTIALS', 401)
-    return author.twoFactorEnabled
-      ? { status: 'two-factor-required', challengeToken: this.issue(author, 'login-challenge') }
-      : { status: 'authenticated', ...(await this.issueSession(author)) }
+    if (!author.twoFactorEnabled)
+      return {
+        status: 'two-factor-setup-required',
+        setupToken: this.issue(author, 'two-factor-setup'),
+      }
+    return { status: 'two-factor-required', challengeToken: this.issue(author, 'login-challenge') }
   }
 
-  async beginTwoFactorSetup(accessToken: string): Promise<TwoFactorSetup> {
-    const author = await this.authenticate(accessToken)
+  async beginTwoFactorSetup(setupToken: string): Promise<TwoFactorSetup> {
+    const author = await this.getTokenAuthor(
+      this.dependencies.tokens.verify(setupToken, 'two-factor-setup'),
+    )
     if (author.twoFactorEnabled)
       throw new ApplicationError(
         'Two-factor authentication is already enabled',
@@ -71,8 +77,13 @@ export class AuthorAuthService {
     return setup
   }
 
-  async confirmTwoFactorSetup(accessToken: string, code: string): Promise<void> {
-    const author = await this.authenticate(accessToken)
+  async confirmTwoFactorSetup(
+    setupToken: string,
+    code: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const author = await this.getTokenAuthor(
+      this.dependencies.tokens.verify(setupToken, 'two-factor-setup'),
+    )
     if (!author.pendingTwoFactorSecretEncrypted)
       throw new ApplicationError(
         'Two-factor setup has not been started',
@@ -105,6 +116,7 @@ export class AuthorAuthService {
         'TWO_FACTOR_CODE_REUSED',
         409,
       )
+    return this.issueSession(updated)
   }
 
   async verifyTwoFactor(
@@ -144,7 +156,10 @@ export class AuthorAuthService {
   }
 
   async authenticate(token: string): Promise<Author> {
-    return this.getTokenAuthor(this.dependencies.tokens.verify(token, 'access'))
+    const author = await this.getTokenAuthor(this.dependencies.tokens.verify(token, 'access'))
+    if (!author.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
+    return author
   }
 
   async renewAccess(refreshToken: string): Promise<string> {
@@ -157,7 +172,10 @@ export class AuthorAuthService {
         'INVALID_REFRESH_TOKEN',
         401,
       )
-    return this.issue(await this.getRefreshAuthor(record), 'access')
+    const author = await this.getRefreshAuthor(record)
+    if (!author.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
+    return this.issue(author, 'access')
   }
 
   async updateProfile(authorId: string, input: AuthorProfileUpdate): Promise<Author> {
@@ -181,6 +199,8 @@ export class AuthorAuthService {
     if (result.status === 'reused')
       throw new ApplicationError('Refresh token reuse detected', 'REFRESH_TOKEN_REUSED', 401)
     const author = await this.getRefreshAuthor(result.record)
+    if (!author.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
     return { accessToken: this.issue(author, 'access'), refreshToken: nextRefreshToken }
   }
 

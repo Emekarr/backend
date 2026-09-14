@@ -16,6 +16,7 @@ import {
   sessionToken,
   setChallenge,
   setSession,
+  setSetup,
 } from '../sessionCookies'
 import { schemas, validateBody, validateQuery } from '../../validation/joi'
 
@@ -41,8 +42,15 @@ export const createAuthorRouter = (dependencies: {
       setActivity(request, { action: 'author.login', actorEmail: body.email })
       const result = await dependencies.authorAuth.login(body.email, body.password)
       if (result.status === 'authenticated') setSession(response, 'author', result, request)
-      else setChallenge(response, 'author', result.challengeToken, request)
-      const next = result.status === 'authenticated' ? '/dashboard' : '/two-factor'
+      else if (result.status === 'two-factor-required')
+        setChallenge(response, 'author', result.challengeToken, request)
+      else setSetup(response, 'author', result.setupToken, request)
+      const next =
+        result.status === 'authenticated'
+          ? '/dashboard'
+          : result.status === 'two-factor-required'
+            ? '/two-factor'
+            : '/two-factor/setup'
       response.status(result.status === 'authenticated' ? 200 : 202).json({ ...result, next })
     }),
   )
@@ -72,27 +80,28 @@ export const createAuthorRouter = (dependencies: {
 
   router.post(
     '/author/auth/2fa/setup',
-    authenticateAuthor(dependencies.authorAuth),
     validateQuery(),
     validateBody(schemas.empty),
+    limit(dependencies.rateLimiter, 'author-2fa-setup', 10, 300),
     asyncRoute(async (request, response) => {
       setActivity(request, { action: 'author.two-factor.setup' })
-      response.json(await dependencies.authorAuth.beginTwoFactorSetup(bearer(request)))
+      response.json(await dependencies.authorAuth.beginTwoFactorSetup(bearer(request, 'setup')))
     }),
   )
 
   router.post(
     '/author/auth/2fa/confirm',
-    authenticateAuthor(dependencies.authorAuth),
     validateQuery(),
     validateBody(schemas.twoFactorCode),
+    limit(dependencies.rateLimiter, 'author-2fa-confirm', 10, 300),
     asyncRoute(async (request, response) => {
       setActivity(request, { action: 'author.two-factor.confirm' })
-      await dependencies.authorAuth.confirmTwoFactorSetup(
-        bearer(request, 'challenge'),
+      const tokens = await dependencies.authorAuth.confirmTwoFactorSetup(
+        bearer(request, 'setup'),
         (request.body as { code: string }).code,
       )
-      response.status(200).json(null)
+      setSession(response, 'author', tokens, request)
+      response.status(200).json({ ...tokens, next: '/dashboard' })
     }),
   )
 

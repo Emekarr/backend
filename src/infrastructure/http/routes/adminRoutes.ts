@@ -366,7 +366,7 @@ export const createAdminRouter = (dependencies: AdminRouteDependencies): Router 
   return router
 }
 
-const authenticate = (auth: AdminAuthService) =>
+export const authenticateAdmin = (auth: AdminAuthService) =>
   asyncRoute(async (request, response, next) => {
     const admin = await authenticateSession(request, response, 'admin', auth)
     Object.assign(request, { admin })
@@ -405,4 +405,8 @@ const bearerToken = (
   kind: 'access' | 'refresh' | 'challenge' | 'setup' = 'access',
 ) => sessionToken(request, 'admin', kind)
 
+export const authenticatedAdmin = (request: Request): Admin =>
+  (request as AuthenticatedRequest).admin
+
+const authenticate = authenticateAdmin
 const authenticated = (request: Request): AuthenticatedRequest => request as AuthenticatedRequest

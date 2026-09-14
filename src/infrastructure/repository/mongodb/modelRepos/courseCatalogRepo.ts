@@ -54,7 +54,11 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
   }
 
   async findById(id: string): Promise<CourseAggregate | null> {
-    const courseDocument = await this.courses.findOne({ id }).lean().exec()
+    const courseDocument = await this.courses
+      .findOne({ id })
+      .select('+publishedSnapshot')
+      .lean()
+      .exec()
     if (!courseDocument) return null
     const [modules, attachments] = await Promise.all([
       this.modules.find({ courseId: id }).sort({ order: 1 }).lean().exec(),
@@ -92,6 +96,13 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
       .find({
         $and: [
           currentCourseFilter,
+          {
+            $or: [
+              { publicationStatus: 'published' },
+              // Existing records pre-date governance and remain available until migrated.
+              { publicationStatus: { $exists: false } },
+            ],
+          },
           // Live courses need to be discoverable before they begin so learners can see
           // their start time. A scheduled premade course remains hidden until release.
           {
@@ -99,11 +110,20 @@ export class CourseCatalogRepo implements CourseCatalogRepository {
           },
         ],
       })
+      .select('+publishedSnapshot')
       .sort({ createdAt: -1 })
       .limit(100)
       .lean()
       .exec()
-    return documents.map(cleanCourse)
+    return documents.map((document) => publishedCourse(cleanCourse(document)))
+  }
+
+  async updateGovernance(id: string, input: Partial<Course>): Promise<Course | null> {
+    const document = await this.courses
+      .findOneAndUpdate({ id }, { $set: input }, { new: true, runValidators: true })
+      .lean()
+      .exec()
+    return document ? cleanCourse(document) : null
   }
 
   async updateCourse(
@@ -268,5 +288,22 @@ const cleanCourse = (value: unknown): Course => {
     ...course,
     accessType: course.accessType ?? 'free',
     priceKobo: course.priceKobo ?? 0,
+  }
+}
+
+const publishedCourse = (course: Course): Course => {
+  const snapshot = course.publishedSnapshot as { course?: Course } | null | undefined
+  if (!snapshot?.course) return course
+  return {
+    ...snapshot.course,
+    reviewStatus: course.reviewStatus,
+    publicationStatus: course.publicationStatus,
+    currentVersionId: course.currentVersionId,
+    publishedVersionId: course.publishedVersionId,
+    submittedAt: course.submittedAt,
+    approvedAt: course.approvedAt,
+    publishedAt: course.publishedAt,
+    archivedAt: course.archivedAt,
+    rejectionReason: course.rejectionReason,
   }
 }

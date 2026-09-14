@@ -8,12 +8,14 @@ import type { ObjectStorage } from '../../entities/interfaces/storage'
 import type { Author } from '../../entities/models/Author'
 import type {
   Assessment,
+  AssessmentKind,
   AssessmentMediaType,
   AssessmentQuestionType,
 } from '../../entities/models/Assessment'
 import type { AssessmentAnswer } from '../../entities/models/AssessmentAttempt'
 import type { Student } from '../../entities/models/Student'
 import type { CertificateService } from '../certificate/CertificateService'
+import { publishedCourseAggregate } from '../course/CourseService'
 
 export interface CreateAssessmentInput {
   title: string
@@ -36,6 +38,7 @@ export interface CreateAssessmentInput {
     resources?: Array<{ id: string; attachmentPath: string; fileName: string }>
     points: number
   }>
+  kind?: AssessmentKind
 }
 
 export interface SubmitAssessmentInput {
@@ -85,16 +88,15 @@ export class AssessmentService {
         400,
       )
     if (!input.courseId)
-      throw new ApplicationError(
-        'An assessment must be linked to a course',
-        'COURSE_REQUIRED',
-        400,
-      )
+      throw new ApplicationError('An assessment must be linked to a course', 'COURSE_REQUIRED', 400)
     const course = await this.dependencies.courses.findById(input.courseId)
     if (!course) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
     if (course.course.createdByAuthorId !== author.id)
       throw new ApplicationError('Only the course author can link an assessment', 'FORBIDDEN', 403)
-    if (await this.dependencies.assessments.findByCourseId(input.courseId))
+    if (
+      (input.kind ?? 'exam') === 'exam' &&
+      (await this.dependencies.assessments.findByCourseId(input.courseId))
+    )
       throw new ApplicationError(
         'This course already has a final assessment',
         'COURSE_ASSESSMENT_EXISTS',
@@ -204,10 +206,103 @@ export class AssessmentService {
       maxAttempts: input.retrySupported ? input.maxAttempts : 1,
       passingScorePercent: input.passingScorePercent,
       questions,
+      kind: input.kind ?? 'exam',
+      reviewStatus: 'draft',
+      publicationStatus: 'unpublished',
+      currentVersionId: null,
+      publishedVersionId: null,
+      submittedAt: null,
+      approvedAt: null,
+      publishedAt: null,
+      archivedAt: null,
+      rejectionReason: null,
     })
-    if (assessment.courseId)
-      await this.dependencies.participation.resetCourseCompletion(assessment.courseId)
     return assessment
+  }
+
+  async update(author: Author, assessmentId: string, input: CreateAssessmentInput) {
+    const assessment = await this.ownedAssessment(author, assessmentId)
+    if (assessment.reviewStatus === 'pending_review' || assessment.reviewStatus === 'approved')
+      throw new ApplicationError(
+        'Submitted and approved assessments cannot be edited',
+        'INVALID_TRANSITION',
+        409,
+      )
+    if (assessment.publicationStatus === 'archived')
+      throw new ApplicationError('Archived content cannot be edited', 'INVALID_TRANSITION', 409)
+    if (
+      assessment.publicationStatus === 'published' &&
+      assessment.currentVersionId === assessment.publishedVersionId
+    )
+      throw new ApplicationError(
+        'Create a controlled update before editing a published assessment',
+        'PUBLISHED_VERSION_IMMUTABLE',
+        409,
+      )
+    if (input.opensAt.getTime() >= input.closesAt.getTime())
+      throw new ApplicationError(
+        'The closing time must be after the opening time',
+        'INVALID_ASSESSMENT_WINDOW',
+        400,
+      )
+    if (input.retrySupported && (input.maxAttempts < 2 || input.maxAttempts > 100))
+      throw new ApplicationError(
+        'Retry-enabled assessments must allow between 2 and 100 total attempts',
+        'INVALID_MAX_ATTEMPTS',
+        400,
+      )
+    if (input.durationMinutes < 5 || input.durationMinutes > 180)
+      throw new ApplicationError(
+        'The assessment time must be between 5 and 180 minutes',
+        'INVALID_DURATION',
+        400,
+      )
+    if (input.questions.filter((question) => question.mediaUrl).length > 10)
+      throw new ApplicationError(
+        'An assessment can contain no more than 10 question attachments',
+        'ASSESSMENT_ATTACHMENT_LIMIT',
+        400,
+      )
+    const course = await this.dependencies.courses.findById(input.courseId)
+    if (!course) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (course.course.createdByAuthorId !== author.id)
+      throw new ApplicationError('Only the course author can link an assessment', 'FORBIDDEN', 403)
+    const existingForCourse =
+      (input.kind ?? assessment.kind ?? 'exam') === 'exam'
+        ? await this.dependencies.assessments.findByCourseId(input.courseId)
+        : null
+    if (existingForCourse && existingForCourse.id !== assessmentId)
+      throw new ApplicationError(
+        'This course already has a final assessment',
+        'COURSE_ASSESSMENT_EXISTS',
+        409,
+      )
+
+    const questions = await this.prepareQuestions(author, input)
+    const totalScore = questions.reduce((sum, question) => sum + question.points, 0)
+    if (totalScore <= 0 || Math.ceil((totalScore * input.passingScorePercent) / 100) > totalScore)
+      throw new ApplicationError(
+        'The pass mark cannot be higher than the total score achievable from the questions',
+        'PASS_MARK_UNACHIEVABLE',
+        400,
+      )
+
+    const updated = await this.dependencies.assessments.update(assessmentId, {
+      title: input.title.trim(),
+      description: input.description.trim(),
+      courseId: input.courseId,
+      durationMinutes: input.durationMinutes,
+      opensAt: input.opensAt,
+      closesAt: input.closesAt,
+      manualReview: input.manualReview,
+      retrySupported: input.retrySupported,
+      maxAttempts: input.retrySupported ? input.maxAttempts : 1,
+      passingScorePercent: input.passingScorePercent,
+      questions,
+      kind: input.kind ?? assessment.kind ?? 'exam',
+    })
+    if (!updated) throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    return assessmentPolicy(updated)
   }
 
   async listOwned(author: Author) {
@@ -419,8 +514,10 @@ export class AssessmentService {
     if (attempt.status !== 'in_progress')
       throw new ApplicationError('This assessment was already submitted', 'ALREADY_SUBMITTED', 409)
     const expired = attempt.expiresAt.getTime() <= Date.now()
-    const assessment = await this.dependencies.assessments.findById(attempt.assessmentId)
-    if (!assessment) throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const currentAssessment = await this.dependencies.assessments.findById(attempt.assessmentId)
+    if (!currentAssessment)
+      throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const assessment = publishedAssessment(currentAssessment)
 
     const submitted = new Map(
       (expired ? [] : input.answers).map((answer) => [answer.questionId, answer]),
@@ -465,8 +562,10 @@ export class AssessmentService {
     const attempt = await this.dependencies.assessments.findAttempt(attemptId)
     if (!attempt || attempt.studentId !== student.id)
       throw new ApplicationError('Assessment attempt not found', 'ATTEMPT_NOT_FOUND', 404)
-    const assessment = await this.dependencies.assessments.findById(attempt.assessmentId)
-    if (!assessment) throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const currentAssessment = await this.dependencies.assessments.findById(attempt.assessmentId)
+    if (!currentAssessment)
+      throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const assessment = publishedAssessment(currentAssessment)
     const attempts = await this.dependencies.assessments.listAttemptsForStudent(
       assessment.id,
       student.id,
@@ -487,9 +586,100 @@ export class AssessmentService {
     return assessmentPolicy(assessment)
   }
 
+  private async prepareQuestions(author: Author, input: CreateAssessmentInput) {
+    for (const question of input.questions) {
+      const media = question.mediaUrl?.trim()
+      if (
+        media?.startsWith('courses/') &&
+        (!media.startsWith(`courses/${author.id}/`) ||
+          !(await this.dependencies.storage.exists(media)) ||
+          !mediaMatchesType(media, question.mediaType ?? null))
+      )
+        throw new ApplicationError(
+          'Question media path is invalid or the upload is incomplete',
+          'INVALID_QUESTION_MEDIA',
+          400,
+        )
+      if ((question.resources?.length ?? 0) > 10)
+        throw new ApplicationError(
+          'A question can contain no more than 10 resources',
+          'QUESTION_RESOURCE_LIMIT',
+          400,
+        )
+      for (const resource of question.resources ?? []) {
+        if (
+          !resource.attachmentPath.startsWith(`courses/${author.id}/`) ||
+          !(await this.dependencies.storage.exists(resource.attachmentPath))
+        )
+          throw new ApplicationError(
+            'A question resource upload is missing or does not belong to you',
+            'INVALID_QUESTION_RESOURCE',
+            400,
+          )
+      }
+    }
+
+    return input.questions.map((question) => {
+      if (Boolean(question.mediaType) !== Boolean(question.mediaUrl))
+        throw new ApplicationError(
+          'Question media type and URL must be provided together',
+          'INVALID_QUESTION_MEDIA',
+          400,
+        )
+      const optionIds = new Set(question.options.map((option) => option.id))
+      if (
+        question.type === 'multiple_choice' &&
+        question.correctOptionIds.some((id) => !optionIds.has(id))
+      )
+        throw new ApplicationError(
+          'Every correct answer must match a question option',
+          'INVALID_CORRECT_ANSWER',
+          400,
+        )
+      if (question.type === 'multiple_choice' && question.correctOptionIds.length !== 1)
+        throw new ApplicationError(
+          'Multiple-choice questions must have exactly one correct answer',
+          'EXACTLY_ONE_CORRECT_ANSWER_REQUIRED',
+          400,
+        )
+      if (question.type === 'free_text' && question.correctOptionIds.length)
+        throw new ApplicationError(
+          'Written-response questions cannot include a selected answer',
+          'INVALID_CORRECT_ANSWER',
+          400,
+        )
+      return {
+        id: randomUUID(),
+        prompt: question.prompt.trim(),
+        type: question.type,
+        options:
+          question.type === 'multiple_choice'
+            ? question.options.map((option) => ({ ...option, label: option.label.trim() }))
+            : [],
+        correctOptionIds:
+          question.type === 'multiple_choice' ? [...new Set(question.correctOptionIds)] : [],
+        mediaType: question.mediaType ?? null,
+        mediaUrl: question.mediaUrl?.trim() || null,
+        resources: (question.resources ?? []).map((resource) => ({
+          id: resource.id,
+          attachmentPath: resource.attachmentPath,
+          fileName: resource.fileName.trim(),
+        })),
+        points: question.points,
+      }
+    })
+  }
+
   private async availableAssessment(assessmentId: string): Promise<Assessment> {
-    const assessment = await this.dependencies.assessments.findById(assessmentId)
-    if (!assessment) throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const current = await this.dependencies.assessments.findById(assessmentId)
+    if (!current) throw new ApplicationError('Assessment not found', 'ASSESSMENT_NOT_FOUND', 404)
+    const assessment = publishedAssessment(current)
+    if (assessment.publicationStatus !== undefined && assessment.publicationStatus !== 'published')
+      throw new ApplicationError(
+        'Assessment content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     const now = Date.now()
     if (now < assessment.opensAt.getTime())
       throw new ApplicationError(
@@ -504,10 +694,11 @@ export class AssessmentService {
 
   private async assertCourseEligibility(student: Student, assessment: Assessment): Promise<void> {
     if (!assessment.courseId) return
-    const [course, progress] = await Promise.all([
+    const [currentCourse, progress] = await Promise.all([
       this.dependencies.courses.findById(assessment.courseId),
       this.dependencies.participation.findProgress(student.id, assessment.courseId),
     ])
+    const course = currentCourse ? publishedCourseAggregate(currentCourse) : null
     if (!course || !progress)
       throw new ApplicationError(
         'Enrollment in the linked course is required',
@@ -541,7 +732,8 @@ export class AssessmentService {
               id: resource.id,
               fileName: resource.fileName,
               url: resource.attachmentPath.startsWith('courses/')
-                ? (await this.dependencies.storage.createSignedView(resource.attachmentPath)).viewUrl
+                ? (await this.dependencies.storage.createSignedView(resource.attachmentPath))
+                    .viewUrl
                 : resource.attachmentPath,
             })),
           ),
@@ -583,6 +775,23 @@ const assessmentPolicy = (assessment: Assessment): Assessment => ({
   maxAttempts: maxAttempts(assessment),
   passingScorePercent: assessment.passingScorePercent ?? 0,
 })
+
+const publishedAssessment = (assessment: Assessment): Assessment => {
+  const snapshot = assessment.publishedSnapshot as Assessment | null | undefined
+  if (!snapshot) return assessment
+  return {
+    ...snapshot,
+    reviewStatus: assessment.reviewStatus,
+    publicationStatus: assessment.publicationStatus,
+    currentVersionId: assessment.currentVersionId,
+    publishedVersionId: assessment.publishedVersionId,
+    submittedAt: assessment.submittedAt,
+    approvedAt: assessment.approvedAt,
+    publishedAt: assessment.publishedAt,
+    archivedAt: assessment.archivedAt,
+    rejectionReason: assessment.rejectionReason,
+  }
+}
 
 const isPassing = (assessment: Assessment, score: number, maximum: number) =>
   maximum > 0 && (score / maximum) * 100 >= (assessment.passingScorePercent ?? 0)

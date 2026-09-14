@@ -93,6 +93,15 @@ export class CourseService {
         accessType: input.accessType,
         priceKobo,
         createdByAuthorId: author.id,
+        reviewStatus: 'draft',
+        publicationStatus: 'unpublished',
+        currentVersionId: null,
+        publishedVersionId: null,
+        submittedAt: null,
+        approvedAt: null,
+        publishedAt: null,
+        archivedAt: null,
+        rejectionReason: null,
       },
       modules: input.modules.map((module) => ({
         title: module.title.trim(),
@@ -101,20 +110,19 @@ export class CourseService {
       attachments: input.attachments,
     })
     await this.dependencies.notifications.publish({
-      title: 'Course published',
-      body: `${aggregate.course.name} was published by ${author.firstName} ${author.lastName}.`,
+      title: 'Course draft created',
+      body: `${aggregate.course.name} was created by ${author.firstName} ${author.lastName} and is awaiting submission.`,
       link: `/courses/detail?id=${encodeURIComponent(aggregate.course.id)}`,
     })
     return aggregate
   }
 
   async addModule(author: Author, courseId: string, input: { title: string; content: string }) {
-    const aggregate = await this.ownedCourse(author, courseId)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     const module = await this.dependencies.courses.addModule(aggregate.course, {
       title: input.title.trim(),
       content: input.content.trim(),
     })
-    await this.dependencies.participation.resetCourseProgress(courseId)
     return module
   }
 
@@ -124,26 +132,19 @@ export class CourseService {
     moduleId: string,
     input: { title: string; content: string },
   ) {
-    const aggregate = await this.ownedCourse(author, courseId)
-    const existing = aggregate.modules.find((item) => item.id === moduleId)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     const module = await this.dependencies.courses.updateModule(aggregate.course, moduleId, {
       title: input.title.trim(),
       content: input.content.trim(),
     })
     if (!module) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
-    if (
-      existing &&
-      (existing.title !== input.title.trim() || existing.content !== input.content.trim())
-    )
-      await this.dependencies.participation.resetCourseProgress(courseId)
     return module
   }
 
   async deleteModule(author: Author, courseId: string, moduleId: string) {
-    const aggregate = await this.ownedCourse(author, courseId)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     const deleted = await this.dependencies.courses.deleteModule(aggregate.course, moduleId)
     if (!deleted) throw new ApplicationError('Course module not found', 'MODULE_NOT_FOUND', 404)
-    await this.dependencies.participation.resetCourseProgress(courseId)
   }
 
   async update(
@@ -151,7 +152,7 @@ export class CourseService {
     courseId: string,
     input: UpdateCourseInput,
   ): Promise<CourseAggregate> {
-    await this.ownedCourse(author, courseId)
+    await this.ownedMutableCourse(author, courseId)
     this.assertLiveClassDuration(input.type, input.liveCallDurationMinutes)
     const priceKobo = this.priceInKobo(input.accessType, input.priceNaira)
     const updated = await this.dependencies.courses.updateCourse(courseId, {
@@ -171,8 +172,7 @@ export class CourseService {
   }
 
   async edit(author: Author, courseId: string, input: EditCourseInput): Promise<CourseAggregate> {
-    const aggregate = await this.ownedCourse(author, courseId)
-    const resetProgress = courseModulesChanged(aggregate.modules, input.modules)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     this.assertLiveClassDuration(input.type, input.liveCallDurationMinutes)
     const priceKobo = this.priceInKobo(input.accessType, input.priceNaira)
     this.assertAttachmentLimit(input.attachments.length)
@@ -221,7 +221,6 @@ export class CourseService {
         moduleIndex: attachment.moduleIndex ?? null,
       })),
     })
-    if (resetProgress) await this.dependencies.participation.resetCourseProgress(courseId)
     return updated
   }
 
@@ -230,7 +229,7 @@ export class CourseService {
     courseId: string,
     input: { attachmentPath: string; fileName?: string | null; moduleId?: string | null },
   ) {
-    const aggregate = await this.ownedCourse(author, courseId)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     this.assertAttachmentLimit(aggregate.attachments.length + 1)
     if (input.moduleId && !aggregate.modules.some((module) => module.id === input.moduleId))
       throw new ApplicationError(
@@ -243,15 +242,25 @@ export class CourseService {
   }
 
   async deleteAttachment(author: Author, courseId: string, attachmentId: string) {
-    const aggregate = await this.ownedCourse(author, courseId)
+    const aggregate = await this.ownedMutableCourse(author, courseId)
     const deleted = await this.dependencies.courses.deleteAttachment(aggregate.course, attachmentId)
     if (!deleted)
       throw new ApplicationError('Course attachment not found', 'ATTACHMENT_NOT_FOUND', 404)
   }
 
   async getAvailable(courseId: string): Promise<CourseAggregate> {
-    const aggregate = await this.dependencies.courses.findById(courseId)
+    const current = await this.dependencies.courses.findById(courseId)
+    const aggregate = current ? publishedCourseAggregate(current) : null
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (
+      aggregate.course.publicationStatus !== undefined &&
+      aggregate.course.publicationStatus !== 'published'
+    )
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     if (aggregate.course.scheduledAt && aggregate.course.scheduledAt.getTime() > Date.now()) {
       throw new ApplicationError(
         `Course will be available on ${aggregate.course.scheduledAt.toISOString()}`,
@@ -263,8 +272,18 @@ export class CourseService {
   }
 
   async getPreview(courseId: string): Promise<CoursePreview> {
-    const aggregate = await this.dependencies.courses.findById(courseId)
+    const current = await this.dependencies.courses.findById(courseId)
+    const aggregate = current ? publishedCourseAggregate(current) : null
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (
+      aggregate.course.publicationStatus !== undefined &&
+      aggregate.course.publicationStatus !== 'published'
+    )
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     // Future live courses remain previewable so learners can see their schedule
     // and bookmark them. Scheduled premade content remains hidden until release.
     if (
@@ -363,8 +382,7 @@ export class CourseService {
   }
 
   async createAttachmentView(courseId: string, attachmentId: string) {
-    const aggregate = await this.dependencies.courses.findById(courseId)
-    if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    const aggregate = await this.getAvailable(courseId)
     const attachment = aggregate.attachments.find((item) => item.id === attachmentId)
     if (!attachment)
       throw new ApplicationError('Course attachment not found', 'ATTACHMENT_NOT_FOUND', 404)
@@ -454,6 +472,29 @@ export class CourseService {
     return aggregate
   }
 
+  private async ownedMutableCourse(author: Author, courseId: string): Promise<CourseAggregate> {
+    const aggregate = await this.ownedCourse(author, courseId)
+    const { reviewStatus, publicationStatus } = aggregate.course
+    if (reviewStatus === 'pending_review' || reviewStatus === 'approved')
+      throw new ApplicationError(
+        'Submitted and approved content cannot be edited',
+        'INVALID_TRANSITION',
+        409,
+      )
+    if (
+      publicationStatus === 'published' &&
+      aggregate.course.currentVersionId === aggregate.course.publishedVersionId
+    )
+      throw new ApplicationError(
+        'Create a controlled update before editing published content',
+        'PUBLISHED_VERSION_IMMUTABLE',
+        409,
+      )
+    if (publicationStatus === 'archived')
+      throw new ApplicationError('Archived content cannot be edited', 'INVALID_TRANSITION', 409)
+    return aggregate
+  }
+
   private async assertAttachments(authorId: string, paths: string[]): Promise<void> {
     for (const path of paths) {
       if (
@@ -510,3 +551,25 @@ export const courseModulesChanged = (
       next[index]?.title.trim() !== module.title ||
       next[index]?.content.trim() !== module.content,
   )
+
+export const publishedCourseAggregate = (aggregate: CourseAggregate): CourseAggregate => {
+  const snapshot = aggregate.course.publishedSnapshot as CourseAggregate | null | undefined
+  if (!snapshot?.course || !Array.isArray(snapshot.modules) || !Array.isArray(snapshot.attachments))
+    return aggregate
+  return {
+    course: {
+      ...snapshot.course,
+      reviewStatus: aggregate.course.reviewStatus,
+      publicationStatus: aggregate.course.publicationStatus,
+      currentVersionId: aggregate.course.currentVersionId,
+      publishedVersionId: aggregate.course.publishedVersionId,
+      submittedAt: aggregate.course.submittedAt,
+      approvedAt: aggregate.course.approvedAt,
+      publishedAt: aggregate.course.publishedAt,
+      archivedAt: aggregate.course.archivedAt,
+      rejectionReason: aggregate.course.rejectionReason,
+    },
+    modules: snapshot.modules,
+    attachments: snapshot.attachments,
+  }
+}

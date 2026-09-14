@@ -58,7 +58,7 @@ export class AdminAuthService {
       throw new ApplicationError('Invalid email or password', 'INVALID_CREDENTIALS', 401)
     }
 
-    if (admin.isSuperAdmin && !admin.twoFactorEnabled) {
+    if (!admin.twoFactorEnabled) {
       return {
         status: 'two-factor-setup-required',
         setupToken: this.issueToken(admin, 'two-factor-setup'),
@@ -270,7 +270,7 @@ export class AdminAuthService {
     const claims = this.dependencies.tokens.verify(accessToken, 'access')
     const admin = await this.getTokenAdmin(claims)
 
-    if (admin.isSuperAdmin && !admin.twoFactorEnabled) {
+    if (!admin.twoFactorEnabled) {
       throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
     }
 
@@ -289,7 +289,7 @@ export class AdminAuthService {
       )
 
     const admin = await this.getRefreshAdmin(record)
-    if (admin.isSuperAdmin && !admin.twoFactorEnabled)
+    if (!admin.twoFactorEnabled)
       throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
     return this.issueToken(admin, 'access')
   }
@@ -310,6 +310,8 @@ export class AdminAuthService {
       throw new ApplicationError('Refresh token reuse detected', 'REFRESH_TOKEN_REUSED', 401)
 
     const admin = await this.getRefreshAdmin(result.record)
+    if (!admin.twoFactorEnabled)
+      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
     return { accessToken: this.issueToken(admin, 'access'), refreshToken: nextRefreshToken }
   }
 

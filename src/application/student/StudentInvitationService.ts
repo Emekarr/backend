@@ -232,6 +232,14 @@ export class StudentInvitationService {
         403,
       )
     }
+    if (invitation.courseId && !student.twoFactorEnabled) {
+      await this.dependencies.invitations.releaseClaim(invitation.id)
+      throw new ApplicationError(
+        'Two-factor setup is required before accepting a course invitation',
+        'TWO_FACTOR_SETUP_REQUIRED',
+        403,
+      )
+    }
     return { courseId: invitation.courseId }
   }
 

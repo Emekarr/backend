@@ -1,4 +1,5 @@
 import { ApplicationError } from '../../entities/errors/applicationError'
+import { publishedCourseAggregate } from '../course/CourseService'
 import type { SecretCipher } from '../../entities/interfaces/auth'
 import type { CoursePaymentRepository } from '../../entities/interfaces/coursePaymentRepository'
 import type { CourseParticipationRepository } from '../../entities/interfaces/courseParticipationRepository'
@@ -498,8 +499,18 @@ export class CoursePaymentService {
   }
 
   private async availablePaidCourse(courseId: string) {
-    const aggregate = await this.dependencies.courses.findById(courseId)
+    const current = await this.dependencies.courses.findById(courseId)
+    const aggregate = current ? publishedCourseAggregate(current) : null
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (
+      aggregate.course.publicationStatus !== undefined &&
+      aggregate.course.publicationStatus !== 'published'
+    )
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     if (aggregate.course.scheduledAt && aggregate.course.scheduledAt.getTime() > Date.now())
       throw new ApplicationError(
         `Course will be available on ${aggregate.course.scheduledAt.toISOString()}`,

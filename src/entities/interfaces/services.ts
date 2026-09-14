@@ -76,6 +76,15 @@ export interface LiveClassScheduledEmailJob {
   durationMinutes: number
 }
 
+export interface ContentReviewEmailJob {
+  type: 'content-review'
+  email: string
+  contentId: string
+  contentTitle: string
+  decision: 'approved' | 'rejected' | 'needs_revision'
+  summary: string
+}
+
 export type EmailJob =
   | PasswordResetEmailJob
   | AdminInvitationEmailJob
@@ -85,6 +94,7 @@ export type EmailJob =
   | LiveReminderEmailJob
   | StudentLiveReminderEmailJob
   | LiveClassScheduledEmailJob
+  | ContentReviewEmailJob
 
 export interface EmailJobQueue {
   enqueue(job: EmailJob): Promise<void>

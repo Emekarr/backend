@@ -14,6 +14,7 @@ import type { StudentAuthService } from '../../application/student/StudentAuthSe
 import type { StudentInvitationService } from '../../application/student/StudentInvitationService'
 import type { StudentCourseBookmarkService } from '../../application/student/StudentCourseBookmarkService'
 import type { StartupService } from '../../application/startup'
+import type { ContentGovernanceService } from '../../application/content/ContentGovernanceService'
 import type { AdminInvitationRepository } from '../../entities/interfaces/adminInvitationRepository'
 import type { AdminRepository } from '../../entities/interfaces/adminRepository'
 import type { AdminNotificationRepository } from '../../entities/interfaces/adminNotificationRepository'
@@ -32,6 +33,7 @@ import type {
 import type { Cache, Repository } from '../../entities/interfaces/database'
 import type { CourseCatalogRepository } from '../../entities/interfaces/courseRepository'
 import type { AssessmentRepository } from '../../entities/interfaces/assessmentRepository'
+import type { ContentGovernanceRepository } from '../../entities/interfaces/contentGovernanceRepository'
 import type { AssessmentService } from '../../application/assessment/AssessmentService'
 import type { CertificateService } from '../../application/certificate/CertificateService'
 import type {
@@ -82,6 +84,9 @@ export const DI_TOKENS = Object.freeze({
   activityRepository: new Token<ActivityRepository>('repository.activity'),
   courseCatalogRepository: new Token<CourseCatalogRepository>('repository.course-catalog'),
   assessmentRepository: new Token<AssessmentRepository>('repository.assessment'),
+  contentGovernanceRepository: new Token<ContentGovernanceRepository>(
+    'repository.content-governance',
+  ),
   certificateRepository: new Token<CertificateRepository>('repository.certificate'),
   certificateRenderer: new Token<CertificateDocumentRenderer>('renderer.certificate'),
   courseParticipationRepository: new Token<CourseParticipationRepository>(
@@ -130,6 +135,7 @@ export const DI_TOKENS = Object.freeze({
     'application.student-course-bookmark',
   ),
   assessmentService: new Token<AssessmentService>('application.assessment'),
+  contentGovernanceService: new Token<ContentGovernanceService>('application.content-governance'),
   certificateService: new Token<CertificateService>('application.certificate'),
   liveClassService: new Token<LiveClassService>('application.live-class'),
   courseParticipationService: new Token<CourseParticipationService>(

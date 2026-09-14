@@ -22,7 +22,7 @@ const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 
 export type StudentLoginResult =
   | { status: 'two-factor-required'; challengeToken: string }
-  | { status: 'two-factor-setup-required'; setupToken: string }
+  | { status: 'authenticated'; accessToken: string; refreshToken: string }
 
 export type StudentProfileUpdate = Pick<
   Student,
@@ -55,15 +55,15 @@ export class StudentAuthService {
     )
     if (!student || !valid || student.disabledAt)
       throw new ApplicationError('Invalid email or password', 'INVALID_CREDENTIALS', 401)
-    return student.twoFactorEnabled
-      ? { status: 'two-factor-required', challengeToken: this.issue(student, 'login-challenge') }
-      : { status: 'two-factor-setup-required', setupToken: this.issue(student, 'two-factor-setup') }
+    if (student.twoFactorEnabled)
+      return {
+        status: 'two-factor-required',
+        challengeToken: this.issue(student, 'login-challenge'),
+      }
+    return { status: 'authenticated', ...(await this.issueSession(student)) }
   }
 
-  async beginTwoFactorSetup(setupToken: string): Promise<TwoFactorSetup> {
-    const student = await this.getTokenStudent(
-      this.dependencies.tokens.verify(setupToken, 'two-factor-setup'),
-    )
+  async beginTwoFactorSetup(student: Student): Promise<TwoFactorSetup> {
     if (student.twoFactorEnabled)
       throw new ApplicationError(
         'Two-factor authentication is already enabled',
@@ -78,12 +78,9 @@ export class StudentAuthService {
   }
 
   async confirmTwoFactorSetup(
-    setupToken: string,
+    student: Student,
     code: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const student = await this.getTokenStudent(
-      this.dependencies.tokens.verify(setupToken, 'two-factor-setup'),
-    )
     const encryptedSecret = student.pendingTwoFactorSecretEncrypted
     if (!encryptedSecret)
       throw new ApplicationError(
@@ -109,6 +106,7 @@ export class StudentAuthService {
         twoFactorEnabled: true,
         twoFactorSecretEncrypted: encryptedSecret,
         pendingTwoFactorSecretEncrypted: null,
+        tokenVersion: student.tokenVersion + 1,
       },
     )
     if (!updated)
@@ -228,12 +226,7 @@ export class StudentAuthService {
   }
 
   async authenticate(accessToken: string): Promise<Student> {
-    const student = await this.getTokenStudent(
-      this.dependencies.tokens.verify(accessToken, 'access'),
-    )
-    if (!student.twoFactorEnabled)
-      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
-    return student
+    return this.getTokenStudent(this.dependencies.tokens.verify(accessToken, 'access'))
   }
 
   async renewAccess(refreshToken: string): Promise<string> {
@@ -246,10 +239,7 @@ export class StudentAuthService {
         'INVALID_REFRESH_TOKEN',
         401,
       )
-    const student = await this.getRefreshStudent(record)
-    if (!student.twoFactorEnabled)
-      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
-    return this.issue(student, 'access')
+    return this.issue(await this.getRefreshStudent(record), 'access')
   }
 
   async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
@@ -267,8 +257,6 @@ export class StudentAuthService {
     if (result.status === 'reused')
       throw new ApplicationError('Refresh token reuse detected', 'REFRESH_TOKEN_REUSED', 401)
     const student = await this.getRefreshStudent(result.record)
-    if (!student.twoFactorEnabled)
-      throw new ApplicationError('Two-factor setup is required', 'TWO_FACTOR_SETUP_REQUIRED', 403)
     return { accessToken: this.issue(student, 'access'), refreshToken: nextRefreshToken }
   }
 

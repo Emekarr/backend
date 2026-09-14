@@ -693,6 +693,17 @@ export class LiveClassService {
     return course
   }
   private async requireEnrollment(studentId: string, courseId: string) {
+    const course = await this.dependencies.courses.findById(courseId)
+    if (
+      !course ||
+      (course.course.publicationStatus !== undefined &&
+        course.course.publicationStatus !== 'published')
+    )
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     const enrollment = await this.dependencies.participation.findEnrollment(studentId, courseId)
     if (!enrollment)
       throw new ApplicationError('Enrollment is required', 'ENROLLMENT_REQUIRED', 403)
@@ -722,6 +733,8 @@ export class LiveClassService {
     )
     if (!participant || participant.leftAt || participant.bannedAt)
       throw new ApplicationError('Join the live class first', 'LIVE_PARTICIPANT_REQUIRED', 403)
+    if (type === 'student' && participant.courseId)
+      await this.requireEnrollment(actorId, participant.courseId)
     return participant
   }
   private async requireRecording(id: string, courseId: string) {

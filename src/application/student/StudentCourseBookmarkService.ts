@@ -3,6 +3,7 @@ import type { CourseCatalogRepository } from '../../entities/interfaces/courseRe
 import type { EmailJobQueue } from '../../entities/interfaces/services'
 import type { StudentCourseBookmarkRepository } from '../../entities/interfaces/studentCourseBookmarkRepository'
 import type { Student } from '../../entities/models/Student'
+import { publishedCourseAggregate } from '../course/CourseService'
 
 const REMINDER_LEADS = [30, 10] as const
 
@@ -16,9 +17,16 @@ export class StudentCourseBookmarkService {
   ) {}
 
   async set(student: Student, courseId: string, enabled: boolean) {
-    const aggregate = await this.dependencies.courses.findById(courseId)
+    const current = await this.dependencies.courses.findById(courseId)
+    const aggregate = current ? publishedCourseAggregate(current) : null
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
     const { course } = aggregate
+    if (course.publicationStatus !== undefined && course.publicationStatus !== 'published')
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     if (enabled && (course.type !== 'live' || !course.scheduledAt))
       throw new ApplicationError(
         'Only scheduled live courses can be bookmarked',

@@ -67,6 +67,29 @@ export const createAssessmentRouter = (dependencies: {
     }),
   )
 
+  router.patch(
+    '/author/assessments/:assessmentId',
+    authenticateAuthor(dependencies.authorAuth),
+    validateQuery(),
+    validateParams(schemas.assessmentParams),
+    validateBody(schemas.assessment),
+    asyncRoute(async (request, response) => {
+      const assessmentId = request.params.assessmentId as string
+      const body = request.body as Omit<CreateAssessmentInput, 'opensAt' | 'closesAt'> & {
+        opensAt: string
+        closesAt: string
+      }
+      setActivity(request, { action: 'assessment.update', metadata: { assessmentId } })
+      response.json(
+        await dependencies.assessments.update(authenticatedAuthor(request), assessmentId, {
+          ...body,
+          opensAt: new Date(body.opensAt),
+          closesAt: new Date(body.closesAt),
+        }),
+      )
+    }),
+  )
+
   router.get(
     '/author/assessments/:assessmentId/submissions',
     authenticateAuthor(dependencies.authorAuth),

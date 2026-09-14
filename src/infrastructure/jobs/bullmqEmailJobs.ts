@@ -23,6 +23,7 @@ import { certificateEmail } from '../email/templates/certificate'
 import { liveReminderEmail } from '../email/templates/liveReminder'
 import { studentLiveReminderEmail } from '../email/templates/studentLiveReminder'
 import { liveClassScheduledEmail } from '../email/templates/liveClassScheduled'
+import { contentReviewEmail } from '../email/templates/contentReview'
 
 export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
   private queue?: Queue<EmailJob>
@@ -226,6 +227,20 @@ export class BullMQEmailJobs implements EmailJobQueue, LifecycleService {
       return
     }
 
+    if (job.data.type === 'content-review') {
+      await this.emailSender.send({
+        to: job.data.email,
+        subject: `${job.data.contentTitle} review: ${job.data.decision.replace('_', ' ')}`,
+        html: contentReviewEmail({
+          contentTitle: job.data.contentTitle,
+          decision: job.data.decision,
+          summary: job.data.summary,
+          reviewUrl: `${this.config.AUTHOR_APP_BASE_URL}/content-review/${encodeURIComponent(job.data.contentId)}`,
+        }),
+      })
+      return
+    }
+
     if (job.data.type === 'certificate') {
       const certificate = await this.certificates.findById(job.data.certificateId)
       if (!certificate) throw new Error('Certificate email job references a missing certificate')
@@ -312,5 +327,7 @@ const emailJobContext = (job: EmailJob) => {
   if (job.type === 'live-class-scheduled')
     return { jobType: job.type, courseId: job.courseId, sessionId: job.sessionId, email: job.email }
   if (job.type === 'password-reset') return { jobType: job.type }
+  if (job.type === 'content-review')
+    return { jobType: job.type, contentId: job.contentId, email: job.email }
   return { jobType: job.type, invitationId: job.invitationId }
 }

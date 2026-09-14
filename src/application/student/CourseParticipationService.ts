@@ -8,6 +8,7 @@ import type { Author } from '../../entities/models/Author'
 import type { Student } from '../../entities/models/Student'
 import type { CourseEnrollment } from '../../entities/models/CourseEnrollment'
 import { generateID } from '../../infrastructure/identifiers/generators'
+import { publishedCourseAggregate } from '../course/CourseService'
 
 export class CourseParticipationService {
   constructor(
@@ -42,7 +43,9 @@ export class CourseParticipationService {
       paymentReference: null,
       enrolledAt: new Date(),
     })
-    const assessment = await this.dependencies.assessments.findByCourseId(courseId)
+    const assessment = visibleAssessment(
+      await this.dependencies.assessments.findByCourseId(courseId),
+    )
     if (!course.modules.length && !assessment && !enrollment.completedAt) {
       const completedAt = new Date()
       await this.dependencies.participation.markEnrollmentCompleted(enrollment.id, completedAt)
@@ -68,13 +71,14 @@ export class CourseParticipationService {
     const authorRating = resolvedEnrollment.completedAt
       ? await this.dependencies.participation.findAuthorRating(student.id, courseId)
       : null
-    const certificate = resolvedEnrollment.completedAt && aggregate.course.certificateOnCompletion
-      ? await this.dependencies.certificates.issue(
-          student,
-          aggregate.course,
-          resolvedEnrollment.completedAt,
-        )
-      : null
+    const certificate =
+      resolvedEnrollment.completedAt && aggregate.course.certificateOnCompletion
+        ? await this.dependencies.certificates.issue(
+            student,
+            aggregate.course,
+            resolvedEnrollment.completedAt,
+          )
+        : null
     return {
       ...aggregate,
       enrollment: resolvedEnrollment,
@@ -138,7 +142,7 @@ export class CourseParticipationService {
     if (
       aggregate.modules.length > 0 &&
       completed.size === aggregate.modules.length &&
-      !(await this.dependencies.assessments.findByCourseId(courseId))
+      !visibleAssessment(await this.dependencies.assessments.findByCourseId(courseId))
     ) {
       const completedAt = new Date()
       await this.dependencies.participation.markEnrollmentCompleted(enrollment.id, completedAt)
@@ -169,7 +173,7 @@ export class CourseParticipationService {
           409,
         )
     }
-    if (await this.dependencies.assessments.findByCourseId(courseId))
+    if (visibleAssessment(await this.dependencies.assessments.findByCourseId(courseId)))
       throw new ApplicationError(
         'This course ends with its final assessment; pass the assessment to complete the course',
         'ASSESSMENT_REQUIRED',
@@ -186,9 +190,12 @@ export class CourseParticipationService {
     const records = await this.dependencies.participation.listForStudent(student.id)
     return Promise.all(
       records.map(async (record) => {
-        const aggregate = await this.dependencies.courses.findById(record.enrollment.courseId)
+        const current = await this.dependencies.courses.findById(record.enrollment.courseId)
+        const aggregate = current ? publishedCourseAggregate(current) : null
         const course = aggregate?.course
-        const author = course ? await this.dependencies.authors.findById(course.createdByAuthorId) : null
+        const author = course
+          ? await this.dependencies.authors.findById(course.createdByAuthorId)
+          : null
         return {
           ...record,
           moduleCount: aggregate?.modules.length ?? 0,
@@ -242,8 +249,18 @@ export class CourseParticipationService {
   }
 
   private async availableCourse(courseId: string) {
-    const aggregate = await this.dependencies.courses.findById(courseId)
+    const current = await this.dependencies.courses.findById(courseId)
+    const aggregate = current ? publishedCourseAggregate(current) : null
     if (!aggregate) throw new ApplicationError('Course not found', 'COURSE_NOT_FOUND', 404)
+    if (
+      aggregate.course.publicationStatus !== undefined &&
+      aggregate.course.publicationStatus !== 'published'
+    )
+      throw new ApplicationError(
+        'Course content has not been published',
+        'CONTENT_NOT_PUBLISHED',
+        403,
+      )
     if (aggregate.course.scheduledAt && aggregate.course.scheduledAt.getTime() > Date.now())
       throw new ApplicationError(
         `Course will be available on ${aggregate.course.scheduledAt.toISOString()}`,
@@ -253,3 +270,8 @@ export class CourseParticipationService {
     return aggregate
   }
 }
+
+const visibleAssessment = <T extends { publicationStatus?: string }>(assessment: T | null) =>
+  assessment?.publicationStatus === undefined || assessment.publicationStatus === 'published'
+    ? assessment
+    : null

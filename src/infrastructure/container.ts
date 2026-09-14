@@ -10,6 +10,7 @@ import { AuthorInvitationService } from '../application/author/AuthorInvitationS
 import { CourseService } from '../application/course/CourseService'
 import { LiveReminderService } from '../application/course/LiveReminderService'
 import { AssessmentService } from '../application/assessment/AssessmentService'
+import { ContentGovernanceService } from '../application/content/ContentGovernanceService'
 import { CertificateService } from '../application/certificate/CertificateService'
 import { LiveClassService } from '../application/live/LiveClassService'
 import { CourseParticipationService } from '../application/student/CourseParticipationService'
@@ -36,6 +37,7 @@ import type {
 import type { Cache } from '../entities/interfaces/database'
 import type { CourseCatalogRepository } from '../entities/interfaces/courseRepository'
 import type { AssessmentRepository } from '../entities/interfaces/assessmentRepository'
+import type { ContentGovernanceRepository } from '../entities/interfaces/contentGovernanceRepository'
 import type {
   CertificateDocumentRenderer,
   CertificateRepository,
@@ -84,6 +86,7 @@ import { createAssessmentRouter } from './http/routes/assessmentRoutes'
 import { createCertificateRouter } from './http/routes/certificateRoutes'
 import { createDirectApiRouter } from './http/directApi'
 import { createPaymentRouter } from './http/routes/paymentRoutes'
+import { createContentAssessmentRouter } from './http/routes/contentAssessmentRoutes'
 import { BullMQActivityJobs } from './jobs/bullmqActivityJobs'
 import { BullMQEmailJobs } from './jobs/bullmqEmailJobs'
 import { PinoLogger } from './logging/pino'
@@ -95,6 +98,7 @@ import { AuthorInvitationRepo } from './repository/mongodb/modelRepos/authorInvi
 import { AuthorRepo } from './repository/mongodb/modelRepos/authorRepo'
 import { CourseCatalogRepo } from './repository/mongodb/modelRepos/courseCatalogRepo'
 import { AssessmentRepo } from './repository/mongodb/modelRepos/assessmentRepo'
+import { ContentGovernanceRepo } from './repository/mongodb/modelRepos/contentGovernanceRepo'
 import { CertificateRepo } from './repository/mongodb/modelRepos/certificateRepo'
 import { PdfCertificateRenderer } from './certificates/pdfCertificateRenderer'
 import { CourseParticipationRepo } from './repository/mongodb/modelRepos/courseParticipationRepo'
@@ -129,6 +133,7 @@ export interface Infrastructure {
   coursePaymentRepository: CoursePaymentRepository
   paymentAuthorizationRepository: PaymentAuthorizationRepository
   assessmentRepository: AssessmentRepository
+  contentGovernanceRepository: ContentGovernanceRepository
   certificateRepository: CertificateRepository
   liveClassRepository: LiveClassRepository
   liveReminderPreferenceRepository: LiveReminderPreferenceRepository
@@ -146,6 +151,7 @@ export interface Infrastructure {
   liveReminderService: LiveReminderService
   studentCourseBookmarkService: StudentCourseBookmarkService
   assessmentService: AssessmentService
+  contentGovernanceService: ContentGovernanceService
   certificateService: CertificateService
   courseParticipationService: CourseParticipationService
   coursePaymentService: CoursePaymentService
@@ -201,6 +207,10 @@ Container.set<CourseCatalogRepository>({
 Container.set<AssessmentRepository>({
   id: DI_TOKENS.assessmentRepository,
   factory: () => new AssessmentRepo(),
+})
+Container.set<ContentGovernanceRepository>({
+  id: DI_TOKENS.contentGovernanceRepository,
+  factory: () => new ContentGovernanceRepo(),
 })
 Container.set<CertificateRepository>({
   id: DI_TOKENS.certificateRepository,
@@ -452,6 +462,20 @@ Container.set<AssessmentService>({
       storage: container.get(DI_TOKENS.objectStorage),
     }),
 })
+Container.set<ContentGovernanceService>({
+  id: DI_TOKENS.contentGovernanceService,
+  factory: (container: ContainerInstance) =>
+    new ContentGovernanceService({
+      governance: container.get(DI_TOKENS.contentGovernanceRepository),
+      admins: container.get(DI_TOKENS.adminRepository),
+      courses: container.get(DI_TOKENS.courseCatalogRepository),
+      assessments: container.get(DI_TOKENS.assessmentRepository),
+      authors: container.get(DI_TOKENS.authorRepository),
+      participation: container.get(DI_TOKENS.courseParticipationRepository),
+      emailJobs: container.get(DI_TOKENS.emailJobs),
+      notifications: container.get(DI_TOKENS.adminNotificationService),
+    }),
+})
 Container.set<CertificateService>({
   id: DI_TOKENS.certificateService,
   factory: (container: ContainerInstance) =>
@@ -606,6 +630,11 @@ Container.set<HttpServer>({
         studentAuth: container.get(DI_TOKENS.studentAuthService),
         live: container.get(DI_TOKENS.liveClassService),
       })
+      const contentAssessmentRouter = createContentAssessmentRouter({
+        adminAuth: container.get(DI_TOKENS.adminAuthService),
+        authorAuth: container.get(DI_TOKENS.authorAuthService),
+        governance: container.get(DI_TOKENS.contentGovernanceService),
+      })
       const routers = [
         adminRouter,
         authorRouter,
@@ -615,6 +644,7 @@ Container.set<HttpServer>({
         paymentRouter,
         studentRouter,
         liveRouter,
+        contentAssessmentRouter,
       ]
       return new ExpressServer(
         container.get(DI_TOKENS.config),
@@ -649,6 +679,7 @@ export const infrastructure: Infrastructure = Object.freeze({
   coursePaymentRepository: Container.get(DI_TOKENS.coursePaymentRepository),
   paymentAuthorizationRepository: Container.get(DI_TOKENS.paymentAuthorizationRepository),
   assessmentRepository: Container.get(DI_TOKENS.assessmentRepository),
+  contentGovernanceRepository: Container.get(DI_TOKENS.contentGovernanceRepository),
   certificateRepository: Container.get(DI_TOKENS.certificateRepository),
   liveClassRepository: Container.get(DI_TOKENS.liveClassRepository),
   liveReminderPreferenceRepository: Container.get(DI_TOKENS.liveReminderPreferenceRepository),
@@ -667,6 +698,7 @@ export const infrastructure: Infrastructure = Object.freeze({
   liveReminderService: Container.get(DI_TOKENS.liveReminderService),
   studentCourseBookmarkService: Container.get(DI_TOKENS.studentCourseBookmarkService),
   assessmentService: Container.get(DI_TOKENS.assessmentService),
+  contentGovernanceService: Container.get(DI_TOKENS.contentGovernanceService),
   certificateService: Container.get(DI_TOKENS.certificateService),
   courseParticipationService: Container.get(DI_TOKENS.courseParticipationService),
   coursePaymentService: Container.get(DI_TOKENS.coursePaymentService),
